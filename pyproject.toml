@@ -1,5 +1,5 @@
 [project]
-name = "pycli"
+name = "git-llm-utils"
 version = "0.1.0"
 description = "Generate a change message for commiting staged changes in the repo"
 readme = "README.md"
