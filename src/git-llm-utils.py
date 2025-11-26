@@ -9,6 +9,7 @@ app = typer.Typer()
 
 FOLDER = typer.Option(is_flag=False, default='.', help="folder with git repo and staged changes")
 WITH_EMOJIS = typer.Option(is_flag=True, default=True, help="If true will instruct the LLMs to add applicable emojis")
+COMMENTS = typer.Option(is_flag=True, default=True, help="If true will generate the commit message commented out so that saving will abort the commit")
 MODEL = typer.Option(is_flag=True, default="qwen3-coder:480b-cloud", help="The model to use (has to be available)")
 
 def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
@@ -39,11 +40,21 @@ def get_staged_changes(folder : str) -> Optional[str]:
     return output
 
 @app.command(help="Generates a commit message based on the git staged changes")
-def status(folder : str = FOLDER, with_emojis : bool = WITH_EMOJIS, model : str = MODEL):
+def status(folder : str = FOLDER, with_emojis : bool = WITH_EMOJIS,  with_comments : bool = COMMENTS, model : str = MODEL):
     changes = get_staged_changes(folder=folder)
     if changes:
+        commented = False
         for message in LLMClient(model_name=model, use_emojis=with_emojis).message(changes, stream=True):
-            print(message, end='')
+            if with_comments:
+                if not commented:
+                    print('# ', end='')
+                    commented = True
+                for c in message:
+                    print(c, end='')
+                    if c == '\n':
+                        print('# ', end='')
+            else:
+                print(message, end='')
         print()
     else:
         print("No changes")
