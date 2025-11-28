@@ -259,7 +259,7 @@ All done, shipt it!
 """
 
 system_prompt_pos = """
-**Analyze the 'git diff --staged' output provided below and return only the generated commit message.**
+**Analyze the 'git diff --staged' output provided below and return only the generated commit message using text or markdown.**
 """
 
 class LLMClient(BaseModel):
@@ -272,7 +272,8 @@ class LLMClient(BaseModel):
     api_key: str | None = Field(description="api key", default=None)
     api_url: str | None  = Field(description="base llm api", default=None)
     use_tools: bool = Field(description="If true, will provide the llm some contextual tooling", default=False)
-    max_tokens: int = Field(description="How many tokens to set at most", default=262144)
+    max_tokens: int = Field(description="How many tokens to send at most", default=262144)
+    max_output_tokens: int = Field(description="How many tokens to get at most", default=65536)
     max_iterations: int = Field(description="How many tools interation to perform at most", default=5)
 
     @property
@@ -302,11 +303,6 @@ class LLMClient(BaseModel):
             ]
         return []
     
-    def _options(self) -> dict:
-        return {
-            'temperature': self.model_temperature
-        }
-
     def message(self, diff_changes: str, stream : bool = False) -> Generator[str, Any, Any]:
         messages=[
             { 
@@ -318,7 +314,6 @@ class LLMClient(BaseModel):
                 "content": diff_changes[:self.max_tokens]
             },
         ]
-        options=self._options()
         tools = self._tools()
         available_tools = self._available_tools()
         incomplete = True
@@ -329,10 +324,13 @@ class LLMClient(BaseModel):
                 messages=messages,
                 tools=interaction < self.max_iterations and tools or [],
                 tool_choice="auto",
-                options=options,
                 base_url=self.api_url,
                 api_key=self.api_key,
-                stream=False
+                max_tokens=self.max_output_tokens,
+                stream=False,
+                reasoning_effort='medium',
+                temperature=self.model_temperature,
+                verbosity="medium"
             )
             response_message = response.choices[0]["message"] # type: ignore
             tool_calls = response.choices[0]["message"]["tool_calls"] # type: ignore
