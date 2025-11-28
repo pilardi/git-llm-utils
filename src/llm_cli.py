@@ -1,6 +1,7 @@
-from ollama import chat
 from pydantic import BaseModel, Field
 from typing import Any, Generator
+from litellm import completion
+import json
 
 system_prompt_pre = """
 You are an expert software engineer and technical writer. Your sole task is to analyze the provided **'git diff --staged' output** and generate a professional, descriptive, and concise **Git commit message**.
@@ -262,43 +263,100 @@ system_prompt_pos = """
 """
 
 class LLMClient(BaseModel):
-
-    use_emojis: bool = Field(default=False, description="If true, will instruct the model to generate feature emojis")
-    model_name: str = Field(default="qwen3-coder:480b-cloud", description="Base model to generate changeset descriptions")
-    model_temperature: float = Field(default=0, description="How creative we want the response to be, 0 by default")
+    """
+    Interacts with the LLM using LiteLLM
+    """
+    use_emojis: bool = Field(description="If true, will instruct the model to generate feature emojis")
+    model_name: str = Field(description="Base model to generate changeset descriptions")
+    model_temperature: float = Field(description="How creative we want the response to be, 0 by default", default=0)
+    api_key: str | None = Field(description="api key", default=None)
+    api_url: str | None  = Field(description="base llm api", default=None)
+    use_tools: bool = Field(description="If true, will provide the llm some contextual tooling", default=False)
+    max_tokens: int = Field(description="How many tokens to set at most", default=262144)
+    max_iterations: int = Field(description="How many tools interation to perform at most", default=5)
 
     @property
-    def system_prompt(self):
+    def system_prompt(self) -> str:
         return self.use_emojis and f"{system_prompt_pre}\n{system_prompt_emojis}\n{system_prompt_pos}" or f"{system_prompt_pre}\n{system_prompt_pos}"
 
-    def message(self, diff_changes: str, stream : bool = False) -> Generator[str, Any, Any]:
+    def _responsitory_description(self) -> str:
         """
-        Generates a commit message from the LLM
-        Args:
-            diff_changes (str): Git diff content.
-            stream: if True will push the messages as they arrive from the llm
-        Returns:
-            str: the commit message.
+        Provides a description of the respository to the LLM if asked
         """
-        response = chat(
-            model=self.model_name,
-            messages=[
-                { 
-                    "role": "system", 
-                    "content": self.system_prompt 
-                },
+        return "not implemented yet!"
+
+    def _available_tools(self) -> dict:
+        return {
+            "get_respository_description": self._responsitory_description,
+        }
+    
+    def _tools(self) -> list[dict]:
+        if self.use_tools:
+            return [
                 {
-                    "role": "user",
-                    "content": diff_changes
-                },
-            ],
-            options={
-                'temperature': self.model_temperature
+                    "type": "function",
+                    "name": "get_respository_description",
+                    "description": "Provides some information about the repository, usualy the content of the README.md file",
+                    "function": self._responsitory_description
+                }
+            ]
+        return []
+    
+    def _options(self) -> dict:
+        return {
+            'temperature': self.model_temperature
+        }
+
+    def message(self, diff_changes: str, stream : bool = False) -> Generator[str, Any, Any]:
+        messages=[
+            { 
+                "role": "system", 
+                "content": self.system_prompt 
             },
-            stream=stream
-        )
-        if stream:
-            for res in response:
-                yield str(res["message"]["content"]) # type: ignore
-        else:
-            yield response["message"]["content"] # type: ignore
+            {
+                "role": "user",
+                "content": diff_changes[:self.max_tokens]
+            },
+        ]
+        options=self._options()
+        tools = self._tools()
+        available_tools = self._available_tools()
+        incomplete = True
+        interaction = 1
+        while incomplete:
+            response = completion(
+                model=f'{self.model_name}',
+                messages=messages,
+                tools=interaction < self.max_iterations and tools or [],
+                tool_choice="auto",
+                options=options,
+                base_url=self.api_url,
+                api_key=self.api_key,
+                stream=False
+            )
+            response_message = response.choices[0]["message"] # type: ignore
+            tool_calls = response.choices[0]["message"]["tool_calls"] # type: ignore
+            if tool_calls:
+                messages.append(response_message)
+                for tool_call in tool_calls:
+                    print(f"calling tools: {tool_call}")
+                    function_name = tool_call.function.name
+                    function_to_call = available_tools.get(function_name, None)
+                    function_args = json.loads(tool_call.function.arguments)
+                    if function_to_call and interaction < self.max_iterations:
+                        function_response = function_to_call(**function_args) or "Can't do that"
+                    else:
+                        function_response = "Can't do that"
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": function_name,
+                        "content": function_response,
+                    })
+            else:
+                incomplete = False
+                if stream:
+                    for res in response.choices[0]["message"]["content"]: # type: ignore
+                        yield res
+                else:
+                    yield response.choices[0]["message"]["content"] # type: ignore

@@ -27,7 +27,7 @@ def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
 def _bool(value : str) -> bool:
     return value.lower() in ('1', 'true', 'yes')
 
-def get_config(key: str, default_value: str) -> str:
+def get_config(key: str, default_value: str | None) -> Optional[str]:
     output, _ = _execute_command(['git', 'config', '--get', f'git-llm-utils.{key}'])
     return output or default_value
 
