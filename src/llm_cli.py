@@ -1,7 +1,8 @@
 from pydantic import BaseModel, Field
-from typing import Any, Generator
+from typing import Any, Callable, Generator
 from litellm import completion
 import json
+import sys
 
 system_prompt_pre = """
 You are an expert software engineer and technical writer. Your sole task is to analyze the provided **'git diff --staged' output** and generate a professional, descriptive, and concise **Git commit message**.
@@ -275,6 +276,7 @@ class LLMClient(BaseModel):
     max_tokens: int = Field(description="How many tokens to send at most", default=262144)
     max_output_tokens: int = Field(description="How many tokens to get at most", default=65536)
     max_iterations: int = Field(description="How many tools interation to perform at most", default=5)
+    respository_description: Callable[[],str] | None = Field(description="a human readable description of the repository", default=None)
 
     @property
     def system_prompt(self) -> str:
@@ -284,7 +286,12 @@ class LLMClient(BaseModel):
         """
         Provides a description of the respository to the LLM if asked
         """
-        return "not implemented yet!"
+        if self.respository_description:
+            try:
+                return self.respository_description()
+            except Exception as e:
+                print(f"Failed to get repository description: {e}", file=sys.stderr)
+        return 'NA'
 
     def _available_tools(self) -> dict:
         return {
@@ -297,7 +304,10 @@ class LLMClient(BaseModel):
                 {
                     "type": "function",
                     "name": "get_respository_description",
-                    "description": "Provides some information about the repository, usualy the content of the README.md file",
+                    "description": """
+                        This function provides a description of the repository where the commit is happening, usualy this is the content of the README.md file.
+                        It **ONLY** gives contextual information about the current respository and nothing else
+                    """,
                     "function": self._responsitory_description
                 }
             ]
@@ -337,7 +347,7 @@ class LLMClient(BaseModel):
             if tool_calls:
                 messages.append(response_message)
                 for tool_call in tool_calls:
-                    print(f"calling tools: {tool_call}")
+                    print(f"calling tools: {tool_call}", file=sys.stderr)
                     function_name = tool_call.function.name
                     function_to_call = available_tools.get(function_name, None)
                     function_args = json.loads(tool_call.function.arguments)

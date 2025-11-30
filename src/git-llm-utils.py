@@ -1,10 +1,15 @@
-from llm_cli import LLMClient
-from git_commands import get_config as _get_config, get_staged_changes, set_config as _set_config, unset_config, Scope, _bool
 from enum import Enum
+import sys
+from git_commands import get_config as _get_config, get_staged_changes, set_config as _set_config, unset_config, Scope
+from llm_cli import LLMClient
+from pathlib import Path
+from typing import Optional
 
 import typer
 
-app = typer.Typer()
+README = 'README.md'
+def _bool(value : str) -> bool:
+    return value and value.lower() in ('1', 'true', 'yes') or False
 
 class Setting(Enum):
     EMOJIS  = "emojis"
@@ -12,23 +17,28 @@ class Setting(Enum):
     MODEL   = "model"
     API_KEY = "api_key"
     API_URL = "api_url"
+    DESCRIPTION_FILE = "readme.md"
+    USE_TOOLS = "use_tools"
 
 DEFAULT_SETTINGS = {
     Setting.EMOJIS: _get_config(Setting.EMOJIS.value, 'True'),
     Setting.COMMENTS: _get_config(Setting.COMMENTS.value, 'True'),
     Setting.MODEL: _get_config(Setting.MODEL.value, 'ollama/qwen3-coder:480b-cloud'),
     Setting.API_KEY: _get_config(Setting.API_KEY.value, None),
-    Setting.API_URL: _get_config(Setting.API_KEY.value, None)
+    Setting.API_URL: _get_config(Setting.API_KEY.value, None),
+    Setting.DESCRIPTION_FILE: _get_config(Setting.DESCRIPTION_FILE.value, README),
+    Setting.USE_TOOLS: _get_config(Setting.USE_TOOLS.value, 'False')
 }
 
+app = typer.Typer()
 EMOJIS = typer.Option(
     is_flag=True,
-    default=_bool(DEFAULT_SETTINGS[Setting.EMOJIS].lower()), # type: ignore
+    default=_bool(DEFAULT_SETTINGS[Setting.EMOJIS]), # type: ignore
     help="If true will instruct the LLMs to add applicable emojis"
 )
 COMMENTS = typer.Option(
     is_flag=True,
-    default=_bool(DEFAULT_SETTINGS[Setting.COMMENTS].lower()), # type: ignore
+    default=_bool(DEFAULT_SETTINGS[Setting.COMMENTS]), # type: ignore
     help="If true will generate the commit message commented out so that saving will abort the commit"
 )
 MODEL = typer.Option(
@@ -46,6 +56,28 @@ API_URL = typer.Option(
     default=DEFAULT_SETTINGS[Setting.API_KEY],
     help="The api url if different than the model provider, as in ollama http://localhost:11434 by default"
 )
+DESCRIPTION_FILE = typer.Option(
+    is_flag=False,
+    default=DEFAULT_SETTINGS[Setting.DESCRIPTION_FILE],
+    help="Description file of the purpose of the respository, usually a README.md file"
+)
+USE_TOOLS= typer.Option(
+    is_flag=True,
+    default=_bool(DEFAULT_SETTINGS[Setting.USE_TOOLS]), # type: ignore
+    help="Whether to allow tools usage or not while requesting llm responses"
+)
+
+def _get_description(file_path : Path) -> Optional[str]:
+    if file_path.exists():
+        with open(file_path, 'r') as file:
+            return file.read()
+    else:
+        print(f"{file_path} does not exist", file=sys.stderr)
+    return None
+
+@app.command(help="Reads respository description")
+def get_description(folder : str = '.', description_file : str = DESCRIPTION_FILE) -> Optional[str]:
+    print(_get_description(file_path = Path(folder, description_file)))
 
 @app.command(help="Generates a commit message based on the git staged changes")
 def status(
@@ -53,16 +85,24 @@ def status(
         with_comments : bool = COMMENTS,
         model : str = MODEL,
         api_key : str | None = API_KEY,
-        api_url : str | None = API_URL
+        api_url : str | None = API_URL,
+        description_file : str = DESCRIPTION_FILE,
+        use_tools: bool = USE_TOOLS,
     ):
-    changes = get_staged_changes(folder='.')
+    folder = '.'
+    changes = get_staged_changes(folder=folder)
     if changes:
         commented = False
+        file_path = Path(folder, description_file)
         client = LLMClient(
             model_name=model,
             use_emojis=with_emojis,
             api_key=api_key,
-            api_url=api_url
+            api_url=api_url,
+            use_tools=use_tools and file_path.exists(),
+            respository_description=lambda: _get_description(
+                file_path
+            ) # type: ignore
         )
         for message in client.message(changes, stream=False):
             if with_comments:
