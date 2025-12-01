@@ -278,6 +278,8 @@ class LLMClient(BaseModel):
     max_iterations: int = Field(description="How many tools interation to perform at most", default=5)
     respository_description: Callable[[],str] | None = Field(description="a human readable description of the repository", default=None)
 
+    _deny_message = "Can't do that"
+
     @property
     def system_prompt(self) -> str:
         return self.use_emojis and f"{system_prompt_pre}\n{system_prompt_emojis}\n{system_prompt_pos}" or f"{system_prompt_pre}\n{system_prompt_pos}"
@@ -291,7 +293,7 @@ class LLMClient(BaseModel):
                 return self.respository_description()
             except Exception as e:
                 print(f"Failed to get repository description: {e}", file=sys.stderr)
-        return 'NA'
+        return ''
 
     def _available_tools(self) -> dict:
         return {
@@ -347,14 +349,13 @@ class LLMClient(BaseModel):
             if tool_calls:
                 messages.append(response_message)
                 for tool_call in tool_calls:
-                    print(f"calling tools: {tool_call}", file=sys.stderr)
                     function_name = tool_call.function.name
                     function_to_call = available_tools.get(function_name, None)
                     function_args = json.loads(tool_call.function.arguments)
                     if function_to_call and interaction < self.max_iterations:
-                        function_response = function_to_call(**function_args) or "Can't do that"
+                        function_response = function_to_call(**function_args) or self._deny_message
                     else:
-                        function_response = "Can't do that"
+                        function_response = self._deny_message
                     messages.append({
                         "tool_call_id": tool_call.id,
                         "role": "tool",

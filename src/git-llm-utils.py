@@ -1,15 +1,18 @@
 from enum import Enum
-import sys
 from git_commands import get_config as _get_config, get_staged_changes, set_config as _set_config, unset_config, Scope
 from llm_cli import LLMClient
 from pathlib import Path
 from typing import Optional
 
+import sys
 import typer
+import os
 
 README = 'README.md'
 def _bool(value : str) -> bool:
     return value and value.lower() in ('1', 'true', 'yes') or False
+
+GIT_LLM_ON=_bool(os.environ.get('GIT_LLM_ON', 'False'))
 
 class Setting(Enum):
     EMOJIS  = "emojis"
@@ -19,6 +22,7 @@ class Setting(Enum):
     API_URL = "api_url"
     DESCRIPTION_FILE = "readme.md"
     USE_TOOLS = "use_tools"
+    MANUAL = "manual"
 
 DEFAULT_SETTINGS = {
     Setting.EMOJIS: _get_config(Setting.EMOJIS.value, 'True'),
@@ -27,7 +31,8 @@ DEFAULT_SETTINGS = {
     Setting.API_KEY: _get_config(Setting.API_KEY.value, None),
     Setting.API_URL: _get_config(Setting.API_KEY.value, None),
     Setting.DESCRIPTION_FILE: _get_config(Setting.DESCRIPTION_FILE.value, README),
-    Setting.USE_TOOLS: _get_config(Setting.USE_TOOLS.value, 'False')
+    Setting.USE_TOOLS: _get_config(Setting.USE_TOOLS.value, 'False'),
+    Setting.MANUAL: _get_config(Setting.MANUAL.value, 'True')
 }
 
 app = typer.Typer()
@@ -66,6 +71,14 @@ USE_TOOLS= typer.Option(
     default=_bool(DEFAULT_SETTINGS[Setting.USE_TOOLS]), # type: ignore
     help="Whether to allow tools usage or not while requesting llm responses"
 )
+MANUAL= typer.Option(
+    is_flag=True,
+    default=_bool(DEFAULT_SETTINGS[Setting.MANUAL]), # type: ignore
+    help="""
+        If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
+        you can set an alias such as `git config --global alias.llmcommit '!GIT_LLM_ON=True git commit`
+    """
+)
 
 def _get_description(file_path : Path) -> Optional[str]:
     if file_path.exists():
@@ -87,8 +100,33 @@ def status(
         api_key : str | None = API_KEY,
         api_url : str | None = API_URL,
         description_file : str = DESCRIPTION_FILE,
-        use_tools: bool = USE_TOOLS,
+        use_tools: bool = USE_TOOLS
     ):
+    generate(
+        with_emojis=with_emojis,
+        with_comments=with_comments,
+        model=model,
+        api_key=api_key,
+        api_url=api_url,
+        description_file=description_file,
+        use_tools=use_tools,
+        manual=False
+    )
+
+@app.command(help="This command is used by the git hook to generate a commit message based on the git staged changes")
+def generate(
+        with_emojis : bool = EMOJIS,
+        with_comments : bool = COMMENTS,
+        model : str = MODEL,
+        api_key : str | None = API_KEY,
+        api_url : str | None = API_URL,
+        description_file : str = DESCRIPTION_FILE,
+        use_tools: bool = USE_TOOLS,
+        manual: bool = MANUAL
+    ):
+    if manual and not GIT_LLM_ON:
+        return
+
     folder = '.'
     changes = get_staged_changes(folder=folder)
     if changes:
