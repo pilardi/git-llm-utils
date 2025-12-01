@@ -40,7 +40,7 @@ git config --global alias.llmc '!GIT_LLM_ON=True git commit'
 
 Conversly, disable manual mode and use regular `git commit` to get the message generated on every commit, ie:
 ```bash
-path/to/git-llm-utils/ set-config manual --value False
+path/to/git-llm-utils set-config manual --value False
 git commit
 ```
 ## Usage
@@ -48,7 +48,7 @@ git commit
 See:
 
 ```bash
-path/to/git-llm-utils/hooks --help
+path/to/git-llm-utils --help
 ```
 
 ## Configuration:
