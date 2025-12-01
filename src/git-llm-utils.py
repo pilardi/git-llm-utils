@@ -20,7 +20,7 @@ class Setting(Enum):
     MODEL   = "model"
     API_KEY = "api_key"
     API_URL = "api_url"
-    DESCRIPTION_FILE = "readme.md"
+    DESCRIPTION_FILE = "description_file"
     USE_TOOLS = "use_tools"
     MANUAL = "manual"
 
@@ -76,7 +76,7 @@ MANUAL= typer.Option(
     default=_bool(DEFAULT_SETTINGS[Setting.MANUAL]), # type: ignore
     help="""
         If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
-        you can set an alias such as `git config --global alias.llmcommit '!GIT_LLM_ON=True git commit`
+        you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
     """
 )
 
@@ -92,10 +92,9 @@ def _get_description(file_path : Path) -> Optional[str]:
 def get_description(folder : str = '.', description_file : str = DESCRIPTION_FILE) -> Optional[str]:
     print(_get_description(file_path = Path(folder, description_file)))
 
-@app.command(help="Generates a commit message based on the git staged changes")
+@app.command(help="Generates a status message based on the git staged changes")
 def status(
         with_emojis : bool = EMOJIS,
-        with_comments : bool = COMMENTS,
         model : str = MODEL,
         api_key : str | None = API_KEY,
         api_url : str | None = API_URL,
@@ -104,7 +103,7 @@ def status(
     ):
     generate(
         with_emojis=with_emojis,
-        with_comments=with_comments,
+        with_comments=False,
         model=model,
         api_key=api_key,
         api_url=api_url,
@@ -113,7 +112,7 @@ def status(
         manual=False
     )
 
-@app.command(help="This command is used by the git hook to generate a commit message based on the git staged changes")
+@app.command(help="Generates a commit message based on the git staged changes for the prepare-commit-msg hook")
 def generate(
         with_emojis : bool = EMOJIS,
         with_comments : bool = COMMENTS,
@@ -159,19 +158,18 @@ def generate(
 
 @app.command(help="Reads the configuration value")
 def get_config(setting: Setting, scope : Scope = Scope.LOCAL):
-    config = _get_config(setting.value, '')
+    config = _get_config(setting.value)
     if config:
-        print(config)
+        print(config, end='')
     else:
         print(f'{DEFAULT_SETTINGS[setting]} [default-value]')
 
-@app.command(help="Sets the configuration setting value")
-def set_config(setting: Setting, value : str, scope : Scope = Scope.LOCAL):
-    _set_config(setting.value, value, scope=scope)
-
-@app.command(help="Removes the configuration setting value (will use the default)")
-def remove_config(setting: Setting, scope : Scope = Scope.LOCAL):
-    unset_config(setting.value, scope=scope)
+@app.command(help="Sets the configuration setting value, if no value is given resets the configuration to the default value")
+def set_config(setting: Setting, value : str | None = None, scope : Scope = Scope.LOCAL):
+    if value:
+        _set_config(setting.value, value, scope=scope)
+    else:
+        unset_config(setting.value, scope=scope)
 
 if __name__ == "__main__":
     app()
