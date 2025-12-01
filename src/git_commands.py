@@ -1,8 +1,9 @@
+from enum import Enum
+from typing import Optional, Tuple
+
 import os
 import subprocess
 import sys
-from typing import Optional, Tuple
-from enum import Enum
 
 class Scope(Enum):
     GLOBAL = "--global" # use global config fil

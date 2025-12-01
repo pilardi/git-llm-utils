@@ -37,42 +37,34 @@ DEFAULT_SETTINGS = {
 
 app = typer.Typer()
 EMOJIS = typer.Option(
-    is_flag=True,
     default=_bool(DEFAULT_SETTINGS[Setting.EMOJIS]), # type: ignore
     help="If true will instruct the LLMs to add applicable emojis"
 )
 COMMENTS = typer.Option(
-    is_flag=True,
     default=_bool(DEFAULT_SETTINGS[Setting.COMMENTS]), # type: ignore
     help="If true will generate the commit message commented out so that saving will abort the commit"
 )
 MODEL = typer.Option(
-    is_flag=True,
     default=DEFAULT_SETTINGS[Setting.MODEL],
     help="The model to use (has to be available) according to the LiteLLM provider, as in ollama/llama2 or openai/gpt-5-mini"
 )
 API_KEY = typer.Option(
-    is_flag=False,
     default=DEFAULT_SETTINGS[Setting.API_KEY],
     help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)"
 )
 API_URL = typer.Option(
-    is_flag=False,
     default=DEFAULT_SETTINGS[Setting.API_KEY],
     help="The api url if different than the model provider, as in ollama http://localhost:11434 by default"
 )
 DESCRIPTION_FILE = typer.Option(
-    is_flag=False,
     default=DEFAULT_SETTINGS[Setting.DESCRIPTION_FILE],
     help="Description file of the purpose of the respository, usually a README.md file"
 )
 USE_TOOLS= typer.Option(
-    is_flag=True,
     default=_bool(DEFAULT_SETTINGS[Setting.USE_TOOLS]), # type: ignore
     help="Whether to allow tools usage or not while requesting llm responses"
 )
 MANUAL= typer.Option(
-    is_flag=True,
     default=_bool(DEFAULT_SETTINGS[Setting.MANUAL]), # type: ignore
     help="""
         If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 

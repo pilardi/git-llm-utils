@@ -1,7 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Any, Callable, Generator
 from litellm import completion
+
 import json
+import os
 import sys
 
 system_prompt_pre = """
@@ -277,8 +279,7 @@ class LLMClient(BaseModel):
     max_output_tokens: int = Field(description="How many tokens to get at most", default=65536)
     max_iterations: int = Field(description="How many tools interation to perform at most", default=5)
     respository_description: Callable[[],str] | None = Field(description="a human readable description of the repository", default=None)
-
-    _deny_message = "Can't do that"
+    _deny_message: str = "Can't do that"
 
     @property
     def system_prompt(self) -> str:
