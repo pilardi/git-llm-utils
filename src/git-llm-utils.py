@@ -1,8 +1,10 @@
 from enum import Enum
+from io import StringIO
 from git_commands import get_config as _get_config, get_staged_changes, set_config as _set_config, unset_config, Scope
 from llm_cli import LLMClient
 from pathlib import Path
-from typing import Optional
+from typing import Optional, TextIO
+from typing_extensions import Annotated
 
 import sys
 import typer
@@ -72,12 +74,12 @@ MANUAL= typer.Option(
     """
 )
 
-def _get_description(file_path : Path) -> Optional[str]:
-    if file_path.exists():
+def _get_description(file_path : Path | None) -> Optional[str]:
+    if file_path is not None and file_path.exists():
         with open(file_path, 'r') as file:
             return file.read()
     else:
-        print(f"{file_path} does not exist", file=sys.stderr)
+        print(f"Description file {file_path} does not exist", file=sys.stderr)
     return None
 
 @app.command(help="Reads respository description")
@@ -104,6 +106,12 @@ def status(
         manual=False
     )
 
+def _get_output(value: str):
+    """
+    This is a hack to let a command accept a TextIO for testing purposes (however this is not supported in the cli, hence the hidden flag)
+    """
+    return sys.stdout
+
 @app.command(help="Generates a commit message based on the git staged changes for the prepare-commit-msg hook")
 def generate(
         with_emojis : bool = EMOJIS,
@@ -111,9 +119,10 @@ def generate(
         model : str = MODEL,
         api_key : str | None = API_KEY,
         api_url : str | None = API_URL,
-        description_file : str = DESCRIPTION_FILE,
+        description_file : str | None = DESCRIPTION_FILE,
         use_tools: bool = USE_TOOLS,
-        manual: bool = MANUAL
+        manual: bool = MANUAL,
+        output: Annotated[TextIO, typer.Argument(hidden=True, parser=_get_output)] = sys.stdout
     ):
     if manual and not GIT_LLM_ON:
         return
@@ -122,13 +131,13 @@ def generate(
     changes = get_staged_changes(folder=folder)
     if changes:
         commented = False
-        file_path = Path(folder, description_file)
+        file_path = description_file and Path(folder, description_file) or None
         client = LLMClient(
             model_name=model,
             use_emojis=with_emojis,
             api_key=api_key,
             api_url=api_url,
-            use_tools=use_tools and file_path.exists(),
+            use_tools=use_tools and file_path is not None and file_path.exists(),
             respository_description=lambda: _get_description(
                 file_path
             ) # type: ignore
@@ -136,17 +145,17 @@ def generate(
         for message in client.message(changes, stream=False):
             if with_comments:
                 if not commented:
-                    print('# ', end='')
+                    print('# ', end='', file=output)
                     commented = True
                 for c in message:
-                    print(c, end='')
+                    print(c, end='', file=output)
                     if c == '\n':
-                        print('# ', end='')
+                        print('# ', end='', file=output)
             else:
-                print(message, end='')
-        print()
+                print(message, end='', file=output)
+        print(file=output)
     else:
-        print("No changes")
+        print("No changes", file=output)
 
 @app.command(help="Reads the configuration value")
 def get_config(setting: Setting, scope : Scope = Scope.LOCAL):
