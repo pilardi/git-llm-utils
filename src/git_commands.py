@@ -5,10 +5,12 @@ import os
 import subprocess
 import sys
 
+
 class Scope(Enum):
-    GLOBAL = "--global" # use global config fil
-    SYSTEM = "--system" # use system config file
-    LOCAL  = "--local"  # use repository config file
+    GLOBAL = "--global"  # use global config fil
+    SYSTEM = "--system"  # use system config file
+    LOCAL = "--local"  # use repository config file
+
 
 def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
     try:
@@ -23,23 +25,38 @@ def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
         )
         return process.stdout, None
     except subprocess.CalledProcessError as e:
-        return None, e.stderr # type: ignore
+        return None, e.stderr  # type: ignore
+
 
 def get_config(key: str, default_value: str | None = None) -> Optional[str]:
-    output, _ = _execute_command(['git', 'config', '--get', f'git-llm-utils.{key}'])
+    output, _ = _execute_command(["git", "config", "--get", f"git-llm-utils.{key}"])
     return output or default_value
 
+
 def set_config(key: str, value: str, scope: Scope = Scope.LOCAL):
-    output, error = _execute_command(['git', 'config', f'{scope.value}', '--replace-all', f'git-llm-utils.{key}', f'{value}'])
+    output, error = _execute_command(
+        [
+            "git",
+            "config",
+            f"{scope.value}",
+            "--replace-all",
+            f"git-llm-utils.{key}",
+            f"{value}",
+        ]
+    )
     if error:
-        print(f'Failed to set {key} config: {error}', file=sys.stderr)
+        print(f"Failed to set {key} config: {error}", file=sys.stderr)
+
 
 def unset_config(key: str, scope: Scope = Scope.LOCAL):
-    output, error = _execute_command(['git', 'config', f'{scope.value}', '--unset', f'git-llm-utils.{key}'])
+    output, error = _execute_command(
+        ["git", "config", f"{scope.value}", "--unset", f"git-llm-utils.{key}"]
+    )
     if error:
-        print(f'Failed to set {key} config: {error}', file=sys.stderr)
+        print(f"Failed to set {key} config: {error}", file=sys.stderr)
 
-def get_staged_changes(folder : str, abort_on_error : bool = True) -> Optional[str]:
+
+def get_staged_changes(folder: str, abort_on_error: bool = True) -> Optional[str]:
     """
     Generate diff message from the staged changes
     Returns:
