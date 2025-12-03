@@ -8,18 +8,45 @@ from git_commands import (
 )
 from llm_cli import LLMClient
 from pathlib import Path
-from typing import Optional, TextIO
+from typing import Dict, Optional, TextIO
 from typing_extensions import Annotated
 
-import sys
-import typer
 import os
-
-README = "README.md"
+import sys
+import tomllib
+import typer
 
 
 def _bool(value: str) -> bool:
     return value and value.lower() in ("1", "true", "yes") or False
+
+
+def _get_tomlib_project() -> Dict:
+    try:
+        with open(Path("pyproject.toml"), mode="rb") as f:
+            data = tomllib.load(f)
+        return data["project"]
+    except FileNotFoundError:
+        print("pyproject.toml not found.", file=sys.stderr)
+    except KeyError:
+        print("'project' not found in pyproject.toml.", file=sys.stderr)
+    return {}
+
+
+def _get_version(show: bool):
+    if show:
+        project = _get_tomlib_project()
+        print(f"Version is {project.get('version', 'undefined')}")
+        raise typer.Exit()
+
+
+def _get_description(file_path: Path | None) -> Optional[str]:
+    if file_path is not None and file_path.exists():
+        with open(file_path, "r") as file:
+            return file.read()
+    else:
+        print(f"Description file {file_path} does not exist", file=sys.stderr)
+    return None
 
 
 GIT_LLM_ON = _bool(os.environ.get("GIT_LLM_ON", "False"))
@@ -42,12 +69,12 @@ DEFAULT_SETTINGS = {
     Setting.MODEL: _get_config(Setting.MODEL.value, "ollama/qwen3-coder:480b-cloud"),
     Setting.API_KEY: _get_config(Setting.API_KEY.value, None),
     Setting.API_URL: _get_config(Setting.API_KEY.value, None),
-    Setting.DESCRIPTION_FILE: _get_config(Setting.DESCRIPTION_FILE.value, README),
+    Setting.DESCRIPTION_FILE: _get_config(Setting.DESCRIPTION_FILE.value, "README.md"),
     Setting.USE_TOOLS: _get_config(Setting.USE_TOOLS.value, "False"),
     Setting.MANUAL: _get_config(Setting.MANUAL.value, "True"),
 }
 
-app = typer.Typer()
+app = typer.Typer(help=_get_tomlib_project().get("description", None))
 EMOJIS = typer.Option(
     default=_bool(DEFAULT_SETTINGS[Setting.EMOJIS]),  # type: ignore
     help="If true will instruct the LLMs to add applicable emojis",
@@ -83,15 +110,10 @@ MANUAL = typer.Option(
         you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
     """,
 )
-
-
-def _get_description(file_path: Path | None) -> Optional[str]:
-    if file_path is not None and file_path.exists():
-        with open(file_path, "r") as file:
-            return file.read()
-    else:
-        print(f"Description file {file_path} does not exist", file=sys.stderr)
-    return None
+OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
+VERSION = typer.Option(
+    None, "--version", callback=_get_version, help="shows current version"
+)
 
 
 @app.command(help="Reads respository description")
@@ -109,6 +131,7 @@ def status(
     api_url: str | None = API_URL,
     description_file: str = DESCRIPTION_FILE,
     use_tools: bool = USE_TOOLS,
+    version: bool | None = VERSION,
 ):
     generate(
         with_emojis=with_emojis,
@@ -120,13 +143,6 @@ def status(
         use_tools=use_tools,
         manual=False,
     )
-
-
-def _get_output(value: str):
-    """
-    This is a hack to let a command accept a TextIO for testing purposes (however this is not supported in the cli, hence the hidden flag)
-    """
-    return sys.stdout
 
 
 @app.command(
@@ -141,9 +157,7 @@ def generate(
     description_file: str | None = DESCRIPTION_FILE,
     use_tools: bool = USE_TOOLS,
     manual: bool = MANUAL,
-    output: Annotated[
-        TextIO, typer.Argument(hidden=True, parser=_get_output)
-    ] = sys.stdout,
+    output: TextIO = OUTPUT,
 ):
     if manual and not GIT_LLM_ON:
         return
