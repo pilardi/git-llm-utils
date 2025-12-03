@@ -52,16 +52,29 @@ path/to/git-llm-utils --help
 ```
 
 ## Configuration:
+See:
+
+```bash
+path/to/git-llm-utils get-config --help
+```
+
 All configurations are made using git config settings:
 
-*`emojis`: `True` will allow the llm to generate Emojis in the commit message
-*`comments`: `True` will generate the message with commented lines
-*`model`: `ollama/qwen3-coder:480b-cloud` use [Litellm](https://models.litellm.ai/) syntaxis
-*`api_key`: None
-*`api_url`: None (will use Litellm defaults)
-*`description_file`: `README.md` will use this file for context to the llm as as tool (if allowed)
-*`use_tools`: `False` will allow the LLM to access the description of your repository
-*`manual`: `True` if True will not generate the commit message unless the `GIT_LLM_ON=True`
+- `emojis`: `True` will allow the llm to generate Emojis in the commit message
+- `comments`: `True` will generate the message with commented lines
+- `model`: `ollama/qwen3-coder:480b-cloud` use [Litellm](https://models.litellm.ai/) syntaxis
+- `api_key`: None
+- `api_url`: None (will use Litellm defaults)
+- `description_file`: `README.md` will use this file for context to the llm as as tool (if allowed)
+- `use_tools`: `False` will allow the LLM to access the description of your repository
+- `manual`: `True` if True will not generate the commit message unless the `GIT_LLM_ON=True`
+
+Use:
+
+```bash
+path/to/git-llm-utils set-config --value value 
+```
+to change the setting
 
 ---
 

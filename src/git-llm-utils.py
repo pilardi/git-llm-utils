@@ -8,17 +8,11 @@ from git_commands import (
 )
 from llm_cli import LLMClient
 from pathlib import Path
-from typing import Dict, Optional, TextIO
-from typing_extensions import Annotated
+from typing import Any, Dict, Optional, TextIO
 
-import os
 import sys
 import tomllib
 import typer
-
-
-def _bool(value: str) -> bool:
-    return value and value.lower() in ("1", "true", "yes") or False
 
 
 def _get_tomlib_project() -> Dict:
@@ -26,10 +20,8 @@ def _get_tomlib_project() -> Dict:
         with open(Path("pyproject.toml"), mode="rb") as f:
             data = tomllib.load(f)
         return data["project"]
-    except FileNotFoundError:
-        print("pyproject.toml not found.", file=sys.stderr)
-    except KeyError:
-        print("'project' not found in pyproject.toml.", file=sys.stderr)
+    except:
+        pass
     return {}
 
 
@@ -49,65 +41,74 @@ def _get_description(file_path: Path | None) -> Optional[str]:
     return None
 
 
-GIT_LLM_ON = _bool(os.environ.get("GIT_LLM_ON", "False"))
+def _bool(value: str) -> bool:
+    return value and value.lower() in ("1", "true", "yes") or False
+
+
+def _get_default_setting(setting: str, default: str | None, flag: bool = True):
+    value = _get_config(setting, default)
+    return setting, flag and _bool(value) or value  # type: ignore
 
 
 class Setting(Enum):
-    EMOJIS = "emojis"
-    COMMENTS = "comments"
-    MODEL = "model"
-    API_KEY = "api_key"
-    API_URL = "api_url"
-    DESCRIPTION_FILE = "description_file"
-    USE_TOOLS = "use_tools"
-    MANUAL = "manual"
+    def __new__(cls, value, default: Any | None):
+        enum = object.__new__(cls)
+        enum._value_ = value
+        enum.default = default  # type: ignore
+        return enum
 
+    EMOJIS = _get_default_setting("emojis", "True", flag=True)
+    COMMENTS = _get_default_setting("comments", "True", flag=True)
+    MODEL = _get_default_setting("model", "ollama/qwen3-coder:480b-cloud")
+    API_KEY = _get_default_setting("api_key", None)
+    API_URL = _get_default_setting("api_url", None)
+    DESCRIPTION_FILE = _get_default_setting("description_file", "README.md")
+    USE_TOOLS = _get_default_setting("use_tools", "False", flag=True)
+    MANUAL = _get_default_setting("manual", "True", flag=True)
 
-DEFAULT_SETTINGS = {
-    Setting.EMOJIS: _get_config(Setting.EMOJIS.value, "True"),
-    Setting.COMMENTS: _get_config(Setting.COMMENTS.value, "True"),
-    Setting.MODEL: _get_config(Setting.MODEL.value, "ollama/qwen3-coder:480b-cloud"),
-    Setting.API_KEY: _get_config(Setting.API_KEY.value, None),
-    Setting.API_URL: _get_config(Setting.API_KEY.value, None),
-    Setting.DESCRIPTION_FILE: _get_config(Setting.DESCRIPTION_FILE.value, "README.md"),
-    Setting.USE_TOOLS: _get_config(Setting.USE_TOOLS.value, "False"),
-    Setting.MANUAL: _get_config(Setting.MANUAL.value, "True"),
-}
 
 app = typer.Typer(help=_get_tomlib_project().get("description", None))
 EMOJIS = typer.Option(
-    default=_bool(DEFAULT_SETTINGS[Setting.EMOJIS]),  # type: ignore
+    default=Setting.EMOJIS.default,  # type: ignore
     help="If true will instruct the LLMs to add applicable emojis",
 )
 COMMENTS = typer.Option(
-    default=_bool(DEFAULT_SETTINGS[Setting.COMMENTS]),  # type: ignore
+    default=Setting.COMMENTS.default,  # type: ignore
     help="If true will generate the commit message commented out so that saving will abort the commit",
 )
 MODEL = typer.Option(
-    default=DEFAULT_SETTINGS[Setting.MODEL],
+    default=Setting.MODEL.default,  # type: ignore
     help="The model to use (has to be available) according to the LiteLLM provider, as in ollama/llama2 or openai/gpt-5-mini",
 )
 API_KEY = typer.Option(
-    default=DEFAULT_SETTINGS[Setting.API_KEY],
+    default=Setting.API_KEY.default,  # type: ignore
     help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
 )
 API_URL = typer.Option(
-    default=DEFAULT_SETTINGS[Setting.API_KEY],
+    default=Setting.API_KEY.default,  # type: ignore
     help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
 )
 DESCRIPTION_FILE = typer.Option(
-    default=DEFAULT_SETTINGS[Setting.DESCRIPTION_FILE],
+    default=Setting.DESCRIPTION_FILE.default,  # type: ignore
     help="Description file of the purpose of the respository, usually a README.md file",
 )
 USE_TOOLS = typer.Option(
-    default=_bool(DEFAULT_SETTINGS[Setting.USE_TOOLS]),  # type: ignore
+    default=Setting.USE_TOOLS.default,  # type: ignore
     help="Whether to allow tools usage or not while requesting llm responses",
 )
 MANUAL = typer.Option(
-    default=_bool(DEFAULT_SETTINGS[Setting.MANUAL]),  # type: ignore
+    default=Setting.MANUAL.default,  # type: ignore
     help="""
         If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
         you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
+    """,
+)
+MANUAL_OVERRIDE = typer.Option(
+    default=False,
+    envvar="GIT_LLM_ON",
+    hidden=True,
+    help=""""
+        When manual mode is acive, the 'GIT_LLM_ON' has to be set, this is used with the prepare message hook to prevent generating the llm comment on every commit
     """,
 )
 OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
@@ -157,9 +158,10 @@ def generate(
     description_file: str | None = DESCRIPTION_FILE,
     use_tools: bool = USE_TOOLS,
     manual: bool = MANUAL,
+    manual_override: bool = MANUAL_OVERRIDE,
     output: TextIO = OUTPUT,
 ):
-    if manual and not GIT_LLM_ON:
+    if manual and not manual_override:
         return
 
     folder = "."
@@ -197,7 +199,7 @@ def get_config(setting: Setting, scope: Scope = Scope.LOCAL):
     if config:
         print(config, end="")
     else:
-        print(f"{DEFAULT_SETTINGS[setting]} [default-value]")
+        print(f"{setting.default} [default-value]")  # type: ignore
 
 
 @app.command(
@@ -206,8 +208,10 @@ def get_config(setting: Setting, scope: Scope = Scope.LOCAL):
 def set_config(setting: Setting, value: str | None = None, scope: Scope = Scope.LOCAL):
     if value:
         _set_config(setting.value, value, scope=scope)
+        print(f"Updated '{setting.value}' to {_get_config(setting.value)}", end="")
     else:
         unset_config(setting.value, scope=scope)
+        print(f"Restored '{setting.value}' to {setting.default} [default-value]")  # type: ignore
 
 
 if __name__ == "__main__":

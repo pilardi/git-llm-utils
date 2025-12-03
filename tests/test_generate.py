@@ -33,7 +33,7 @@ def _mock(monkeypatch, changes: str | Any = None, message: str | Any = None):
 def test_generate_manual_does_nothing(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    git_llm_utils.generate(manual=True, output=res)
+    git_llm_utils.generate(manual=True, manual_override=False, output=res)
     res.seek(0)
     assert res.read() == ""
 
@@ -41,7 +41,7 @@ def test_generate_manual_does_nothing(monkeypatch):
 def test_generate_with_no_change(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    git_llm_utils.generate(manual=False, output=res)
+    git_llm_utils.generate(manual=False, manual_override=True, output=res)
     res.seek(0)
     assert res.read() == "No changes\n"
 
@@ -51,6 +51,7 @@ def test_generate_with_comments(monkeypatch):
     res = StringIO()
     git_llm_utils.generate(
         manual=False,
+        manual_override=True,
         with_comments=True,
         description_file=None,
         with_emojis=False,
@@ -68,6 +69,7 @@ def test_generate_without_comments(monkeypatch):
     res = StringIO()
     git_llm_utils.generate(
         manual=False,
+        manual_override=True,
         with_comments=False,
         description_file=None,
         with_emojis=False,
