@@ -1,7 +1,7 @@
 [project]
 name = "git-llm-utils"
 version = "0.1.0"
-description = "CLI tool for interacting with an LLM while using git"
+description = "CLI tool for interacting with a LLM while using git"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [

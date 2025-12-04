@@ -1,4 +1,4 @@
-.PHONY: format verify install update dist test clean-dist
+.PHONY: format verify install update dist tests clean-dist
 
 format:
 	@echo "Formatting Python files..."
@@ -18,9 +18,9 @@ update:
 
 dist: install
 	@echo "Installing dependencies ..."
-	pyinstaller --onefile src/git-llm-utils.py
+	pyinstaller git-llm-utils.spec
 
-test:
+tests:
 	@echo "Running tests with Pytest..."
 	uv run pytest
 
