@@ -1,13 +1,14 @@
 from enum import Enum
-from git_commands import (
+from git_llm_utils.git_commands import (
     get_config as _get_config,
     get_staged_changes,
     set_config as _set_config,
     unset_config,
     Scope,
 )
-from llm_cli import LLMClient
+from git_llm_utils.llm_cli import LLMClient
 from pathlib import Path
+from importlib.metadata import PackageNotFoundError, version as _import_version
 from typing import Any, Dict, Optional, TextIO
 
 import sys
@@ -20,15 +21,18 @@ def _get_tomlib_project() -> Dict:
         with open(Path("pyproject.toml"), mode="rb") as f:
             data = tomllib.load(f)
         return data["project"]
-    except:
+    except Exception:
         pass
     return {}
 
 
 def _get_version(show: bool):
     if show:
-        project = _get_tomlib_project()
-        print(f"Version is {project.get('version', 'undefined')}")
+        try:
+            v = _import_version("git_llm_utils")
+        except PackageNotFoundError:
+            v = "undefined"
+        print(f"Version is {v}")
         raise typer.Exit()
 
 
@@ -256,7 +260,3 @@ def set_config(
 @app.callback()
 def main(version: bool | None = VERSION):
     pass
-
-
-if __name__ == "__main__":
-    app()

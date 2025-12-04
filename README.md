@@ -18,15 +18,19 @@ Git hooks powered by LLMs: automatically generate meaningful commit messages bas
 
 ## Getting started
 
-1. Clone the repo (or install from source).
-2. Configure Git to use the hook:
+If you are building from the source:
+
+1. Clone the repo
+2. Make a copy of the [prepare commit hook](./prepare-commit-msg.sample) into `path/to/git-llm-utils/prepare-commit-msg`
+3. Update `/path/to/git-llm-utils/` to your working directoty in the `path/to/git-llm-utils/prepare-commit-msg` file
+4. Configure Git to use the hook:
 
 ```bash
 git config core.hooksPath path/to/git-llm-utils/prepare-commit-msg
 ```
 
-3. Ensure your environment (or config) provides credentials or access to a suitable LLM (see [Configuration](#configuration))
-4. Run: 
+5. Ensure your environment (or config) provides credentials or access to a suitable LLM (see [Configuration](#configuration))
+6. Run: 
 ```bash
 path/to/git-llm-utils status
 ``` 
@@ -36,6 +40,7 @@ to see the generated message
 
 ```bash
 git config --global alias.llmc '!GIT_LLM_ON=True git commit'
+git llmc
 ```
 
 Conversly, disable manual mode and use regular `git commit` to get the message generated on every commit, ie:
@@ -43,6 +48,7 @@ Conversly, disable manual mode and use regular `git commit` to get the message g
 path/to/git-llm-utils set-config manual --value False
 git commit
 ```
+
 ## Usage
 
 See:

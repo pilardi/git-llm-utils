@@ -1,8 +1,11 @@
 [project]
+authors = [{name = "Pablo Ilardi", email = "pilardi@gmail.com"}]
 name = "git-llm-utils"
-version = "0.1.0"
+dynamic = ["version"]
 description = "CLI tool for interacting with a LLM while using git"
 readme = "README.md"
+license = "MIT"
+license-files = ["LICEN[CS]E.*"]
 requires-python = ">=3.10"
 dependencies = [
     "litellm>=1.80.5",
@@ -13,8 +16,31 @@ dependencies = [
     "typer<=0.18.0",
 ]
 
+[project.urls]
+Respository = "https://github.com/pilardi/git-llm-utils.git"
+
+[build-system]
+requires = ["hatchling", "uv-dynamic-versioning"]
+build-backend = "hatchling.build"
+
+[tool.hatch.version]
+source = "uv-dynamic-versioning"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/git_llm_utils"]
+
+[tool.uv-dynamic-versioning]
+fallback-version = "0.1.0"
+
 [dependency-groups]
 dev = [
     "pytest>=9.0.1",
     "ruff>=0.14.7",
 ]
+
+[tool.uv.build-backend]
+namespace = true
+module-name = "git_llm_utils"
+
+[project.scripts]
+git-llm-utils = "git_llm_utils:main"

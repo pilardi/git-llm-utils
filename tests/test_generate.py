@@ -6,9 +6,8 @@ sys.path.append("src")
 
 from types import SimpleNamespace
 from typing import Any
-from llm_cli import LLMClient
-
-git_llm_utils = __import__("git-llm-utils")
+from git_llm_utils import generate
+from git_llm_utils.llm_cli import LLMClient
 
 
 def _mock_changes(monkeypatch, changes: str | Any):
@@ -33,7 +32,7 @@ def _mock(monkeypatch, changes: str | Any = None, message: str | Any = None):
 def test_generate_manual_does_nothing(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    git_llm_utils.generate(manual=True, manual_override=False, output=res)
+    generate(manual=True, manual_override=False, output=res)
     res.seek(0)
     assert res.read() == ""
 
@@ -41,7 +40,7 @@ def test_generate_manual_does_nothing(monkeypatch):
 def test_generate_with_no_change(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    git_llm_utils.generate(manual=False, manual_override=True, output=res)
+    generate(manual=False, manual_override=True, output=res)
     res.seek(0)
     assert res.read() == "No changes\n"
 
@@ -49,7 +48,7 @@ def test_generate_with_no_change(monkeypatch):
 def test_generate_with_comments(monkeypatch):
     _mock(monkeypatch, "test", "test")
     res = StringIO()
-    git_llm_utils.generate(
+    generate(
         manual=False,
         manual_override=True,
         with_comments=True,
@@ -67,7 +66,7 @@ def test_generate_with_comments(monkeypatch):
 def test_generate_without_comments(monkeypatch):
     _mock(monkeypatch, "test", "test")
     res = StringIO()
-    git_llm_utils.generate(
+    generate(
         manual=False,
         manual_override=True,
         with_comments=False,

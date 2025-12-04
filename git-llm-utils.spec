@@ -4,7 +4,7 @@ import os
 litellm_dir = os.path.dirname(os.path.abspath(litellm.__file__))
 
 a = Analysis(
-    ['src/git-llm-utils.py'],
+    ['src/git_llm_utils/main.py'],
     pathex=[],
     binaries=[],
     datas=[

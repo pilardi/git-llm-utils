@@ -1,12 +1,12 @@
 .PHONY: format verify install update dist tests clean-dist
 
 format:
-	@echo "Formatting Python files..."
+	@echo "Formatting Python files ..."
 	uv run ruff format  .
 
 verify:
-	@echo "Testing Python files formatting..."
-	uv run ruff format --diff .
+	@echo "Testing Python files ..."
+	uv run ruff format --diff . && uv run ruff check .
 
 install:
 	@echo "Installing dependencies ..."
