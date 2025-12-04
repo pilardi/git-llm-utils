@@ -30,7 +30,7 @@ def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
 
 def get_config(key: str, default_value: str | None = None) -> Optional[str]:
     output, _ = _execute_command(["git", "config", "--get", f"git-llm-utils.{key}"])
-    return output or default_value
+    return output and str.strip(output) or default_value
 
 
 def set_config(key: str, value: str, scope: Scope = Scope.LOCAL):

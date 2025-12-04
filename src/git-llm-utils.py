@@ -47,14 +47,21 @@ def _bool(value: str) -> bool:
 
 def _get_default_setting(setting: str, default: str | None, flag: bool = True):
     value = _get_config(setting, default)
-    return setting, flag and _bool(value) or value  # type: ignore
+    return (
+        setting,
+        flag,
+        flag and _bool(value) or value,  # type: ignore
+        flag and _bool(default) or default,  # type: ignore
+    )
 
 
 class Setting(Enum):
-    def __new__(cls, value, default: Any | None):
+    def __new__(cls, value, flag: bool, default: Any | None, factory: Any | None):
         enum = object.__new__(cls)
         enum._value_ = value
+        enum.flag = flag  # type: ignore
         enum.default = default  # type: ignore
+        enum.factory = factory  # type: ignore
         return enum
 
     EMOJIS = _get_default_setting("emojis", "True", flag=True)
@@ -111,6 +118,11 @@ MANUAL_OVERRIDE = typer.Option(
         When manual mode is acive, the 'GIT_LLM_ON' has to be set, this is used with the prepare message hook to prevent generating the llm comment on every commit
     """,
 )
+CONFIRM = typer.Option(
+    None,
+    "--confirm",
+    help="Requests confirmation before changing a setting",
+)
 OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
 VERSION = typer.Option(
     None, "--version", callback=_get_version, help="shows current version"
@@ -132,7 +144,6 @@ def status(
     api_url: str | None = API_URL,
     description_file: str = DESCRIPTION_FILE,
     use_tools: bool = USE_TOOLS,
-    version: bool | None = VERSION,
 ):
     generate(
         with_emojis=with_emojis,
@@ -202,16 +213,49 @@ def get_config(setting: Setting, scope: Scope = Scope.LOCAL):
         print(f"{setting.default} [default-value]")  # type: ignore
 
 
+def _confirm(message: str, confirm: bool = CONFIRM):
+    if confirm:
+        confirmed = typer.confirm(message)
+        if not confirmed:
+            raise typer.Abort()
+
+
 @app.command(
     help="Sets the configuration setting value, if no value is given resets the configuration to the default value"
 )
-def set_config(setting: Setting, value: str | None = None, scope: Scope = Scope.LOCAL):
+def set_config(
+    setting: Setting,
+    value: str | None = None,
+    scope: Scope = Scope.LOCAL,
+    confirm: bool = CONFIRM,
+):
+    config = _get_config(setting.value)
     if value:
-        _set_config(setting.value, value, scope=scope)
-        print(f"Updated '{setting.value}' to {_get_config(setting.value)}", end="")
+        if setting.flag:  # type: ignore
+            value = _bool(value)  # type: ignore
+        _confirm(
+            f"Are you sure you want to update the setting: {setting.value} from {config} to {value}?",
+            confirm=confirm,
+        )
+        _set_config(setting.value, value, scope=scope)  # type: ignore
+        print(f"Updated {setting.value} to {_get_config(setting.value)}")
     else:
-        unset_config(setting.value, scope=scope)
-        print(f"Restored '{setting.value}' to {setting.default} [default-value]")  # type: ignore
+        if config:
+            _confirm(
+                f"Are you sure you want to remove the {setting.value} setting value: {config}?",
+                confirm=confirm,
+            )
+            unset_config(setting.value, scope=scope)
+            print(f"Restored {setting.value} to {setting.factory} [default-value]")  # type: ignore
+        else:
+            print(
+                f"Setting {setting.value} is already using {setting.factory} [default-value]"  # type: ignore
+            )
+
+
+@app.callback()
+def main(version: bool | None = VERSION):
+    pass
 
 
 if __name__ == "__main__":
