@@ -261,7 +261,7 @@ All done, shipt it!
 """
 
 system_prompt_pos = """
-**Analyze the 'git diff --staged' output provided below and return only the generated commit message using text or markdown.**
+**Analyze the 'git diff --staged' output provided below and return only the generated commit message using only plain text. Do not output markdown.**
 """
 
 
