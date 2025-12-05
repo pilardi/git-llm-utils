@@ -169,7 +169,7 @@ def status(
         description_file=description_file,
         use_tools=use_tools,
         manual=False,
-        output=sys.stdout
+        output=sys.stdout,
     )
 
 

@@ -1,12 +1,26 @@
-.PHONY: format verify install update dist tests clean-dist
+.PHONY: format check-formatting check-code check tests verify install update dist clean-dist
 
 format:
 	@echo "Formatting Python files ..."
 	uv run ruff format  .
 
-verify:
-	@echo "Testing Python files ..."
-	uv run ruff format --diff . && uv run ruff check .
+check-formatting:
+	@echo "== Running formatting verification =="
+	uv run ruff format --diff .
+
+check-code:
+	@echo "== Running code verification =="
+	uv run ruff check .
+
+check: check-formatting check-code
+	@echo "Code verification complete"
+
+tests:
+	@echo "== Running python tests =="
+	uv run pytest
+
+verify: check tests
+	@echo "Verification complete"
 
 install:
 	@echo "Installing dependencies ..."
@@ -23,10 +37,6 @@ dist: install
 binary: install
 	@echo "Building binary ..."
 	pyinstaller git-llm-utils.spec
-
-tests:
-	@echo "Running tests with Pytest..."
-	uv run pytest
 
 clean-dist:
 	@echo "Removing dist ..."
