@@ -224,7 +224,7 @@ def generate(
 def get_config(setting: Setting, scope: Scope = Scope.LOCAL):
     config = _get_config(setting.value)
     if config:
-        print(config, end="")
+        print(config)
     else:
         print(f"{setting.default} [default-value]")  # type: ignore
 
