@@ -12,6 +12,23 @@ class Scope(Enum):
     LOCAL = "--local"  # use repository config file
 
 
+def _bool(value: str) -> bool:
+    return value and value.lower() in ("1", "true", "yes") or False
+
+
+def get_default_setting(
+    setting: str, default: str | None, flag: bool = False, help: str | None = None
+):
+    value = get_config(setting, default)
+    return (
+        setting,
+        flag,
+        flag and str(_bool(value)) or value,  # type: ignore
+        flag and str(_bool(default)) or default,  # type: ignore
+        help,
+    )
+
+
 def _execute_command(command: list[str]) -> Tuple[str, Optional[str]]:
     try:
         process = subprocess.run(

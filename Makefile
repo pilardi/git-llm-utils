@@ -1,4 +1,6 @@
-.PHONY: format check-formatting check-code check tests verify install update dist clean-dist
+.PHONY: format check-formatting check-code check tests test-src-dist test-bin-dist test-dist verify install update dist clean-dist
+
+DISTRIBUTION_TESTS = tests/test_generate.py
 
 format:
 	@echo "Formatting Python files ..."
@@ -19,6 +21,17 @@ tests:
 	@echo "== Running python tests =="
 	uv run pytest
 
+test-src-dist: dist
+	@echo "== Running python tests over source dist =="
+	uv run --isolated --no-project --with dist/*.tar.gz pytest $(DISTRIBUTION_TESTS)
+
+test-bin-dist: dist
+	@echo "== Running python tests over bin dist =="
+	uv run --isolated --no-project --with dist/*.whl pytest $(DISTRIBUTION_TESTS)
+
+test-dist: test-src-dist test-bin-dist
+	@echo "Distribution tests complete"
+
 verify: check tests
 	@echo "Verification complete"
 
@@ -32,7 +45,7 @@ update:
 
 dist: install
 	@echo "Building package ..."
-	uv dist
+	uv build
 
 binary: install
 	@echo "Building binary ..."

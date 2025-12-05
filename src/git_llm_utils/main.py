@@ -1,6 +1,8 @@
 from enum import Enum
 from git_llm_utils.git_commands import (
+    _bool,
     get_config as _get_config,
+    get_default_setting as _get_default_setting,
     get_staged_changes,
     set_config as _set_config,
     unset_config,
@@ -8,12 +10,82 @@ from git_llm_utils.git_commands import (
 )
 from git_llm_utils.llm_cli import LLMClient
 from pathlib import Path
+from rich.console import Console
+from rich.table import Table
 from typing import Any, Dict, Optional, TextIO
 
+import git_llm_utils
 import sys
 import tomllib
 import typer
-import git_llm_utils
+
+
+class Setting(Enum):
+    def __new__(
+        cls,
+        value,
+        flag: bool,
+        default: Any | None,
+        factory: Any | None,
+        help: str | None,
+    ):
+        enum = object.__new__(cls)
+        enum._value_ = value
+        enum.flag = flag  # type: ignore
+        enum.default = default  # type: ignore
+        enum.factory = factory  # type: ignore
+        enum.help = help  # type: ignore
+        enum.option = typer.Option(  # type: ignore
+            default=default,
+            help=help,
+        )
+        return enum
+
+    EMOJIS = _get_default_setting(
+        "emojis",
+        "True",
+        flag=True,
+        help="If true will instruct the LLMs to add applicable emojis",
+    )
+    COMMENTS = _get_default_setting(
+        "comments",
+        "True",
+        flag=True,
+        help="If true will generate the commit message commented out so that saving will abort the commit",
+    )
+    MODEL = _get_default_setting(
+        "model",
+        "ollama/qwen3-coder:480b-cloud",
+        help="The model to use (has to be available) according to the LiteLLM provider, as in ollama/llama2 or openai/gpt-5-mini",
+    )
+    API_KEY = _get_default_setting(
+        "api_key",
+        None,
+        help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
+    )
+    API_URL = _get_default_setting(
+        "api_url",
+        None,
+        help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
+    )
+    DESCRIPTION_FILE = _get_default_setting(
+        "description_file",
+        "README.md",
+        help="Description file of the purpose of the respository, usually a README.md file",
+    )
+    USE_TOOLS = _get_default_setting(
+        "tools",
+        "False",
+        flag=True,
+        help="Whether to allow tools usage or not while requesting llm responses",
+    )
+    MANUAL = _get_default_setting(
+        "manual",
+        "True",
+        flag=True,
+        help="""If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
+        you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`""",
+    )
 
 
 def _get_tomlib_project() -> Dict:
@@ -36,6 +108,16 @@ def _get_version(show: bool):
         raise typer.Exit()
 
 
+def _show_config(show: bool):
+    if show:
+        console = Console()
+        table = Table("Setting", "Default", "Value", "Description")
+        for setting in Setting:
+            table.add_row(setting.value, setting.factory, setting.default, setting.help)  # type: ignore
+        console.print(table)
+        raise typer.Exit()
+
+
 def _get_description(file_path: Path | None) -> Optional[str]:
     if file_path is not None and file_path.exists():
         with open(file_path, "r") as file:
@@ -45,86 +127,7 @@ def _get_description(file_path: Path | None) -> Optional[str]:
     return None
 
 
-def _bool(value: str) -> bool:
-    return value and value.lower() in ("1", "true", "yes") or False
-
-
-def _get_default_setting(setting: str, default: str | None, flag: bool = False):
-    value = _get_config(setting, default)
-    return (
-        setting,
-        flag,
-        flag and str(_bool(value)) or value,  # type: ignore
-        flag and str(_bool(default)) or default,  # type: ignore
-    )
-
-
-class Setting(Enum):
-    def __new__(cls, value, flag: bool, default: Any | None, factory: Any | None):
-        enum = object.__new__(cls)
-        enum._value_ = value
-        enum.flag = flag  # type: ignore
-        enum.default = default  # type: ignore
-        enum.factory = factory  # type: ignore
-        return enum
-
-    EMOJIS = _get_default_setting("emojis", "True", flag=True)
-    COMMENTS = _get_default_setting("comments", "True", flag=True)
-    MODEL = _get_default_setting("model", "ollama/qwen3-coder:480b-cloud")
-    API_KEY = _get_default_setting("api_key", None)
-    API_URL = _get_default_setting("api_url", None)
-    DESCRIPTION_FILE = _get_default_setting("description_file", "README.md")
-    USE_TOOLS = _get_default_setting("use_tools", "False", flag=True)
-    MANUAL = _get_default_setting("manual", "True", flag=True)
-
-    @staticmethod
-    def __metadata__():
-        return [
-            {
-                "name": setting.value,  # type: ignore
-                "default": setting.factory,  # type: ignore
-                "value": setting.default,  # type: ignore
-            }
-            for setting in Setting
-        ]
-
-
 app = typer.Typer(help=_get_tomlib_project().get("description", None))
-EMOJIS = typer.Option(
-    default=Setting.EMOJIS.default,  # type: ignore
-    help="If true will instruct the LLMs to add applicable emojis",
-)
-COMMENTS = typer.Option(
-    default=Setting.COMMENTS.default,  # type: ignore
-    help="If true will generate the commit message commented out so that saving will abort the commit",
-)
-MODEL = typer.Option(
-    default=Setting.MODEL.default,  # type: ignore
-    help="The model to use (has to be available) according to the LiteLLM provider, as in ollama/llama2 or openai/gpt-5-mini",
-)
-API_KEY = typer.Option(
-    default=Setting.API_KEY.default,  # type: ignore
-    help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
-)
-API_URL = typer.Option(
-    default=Setting.API_KEY.default,  # type: ignore
-    help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
-)
-DESCRIPTION_FILE = typer.Option(
-    default=Setting.DESCRIPTION_FILE.default,  # type: ignore
-    help="Description file of the purpose of the respository, usually a README.md file",
-)
-USE_TOOLS = typer.Option(
-    default=Setting.USE_TOOLS.default,  # type: ignore
-    help="Whether to allow tools usage or not while requesting llm responses",
-)
-MANUAL = typer.Option(
-    default=Setting.MANUAL.default,  # type: ignore
-    help="""
-        If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
-        you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
-    """,
-)
 MANUAL_OVERRIDE = typer.Option(
     default=False,
     envvar="GIT_LLM_ON",
@@ -142,23 +145,27 @@ OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdo
 VERSION = typer.Option(
     None, "--version", callback=_get_version, help="shows current version"
 )
+CONFIG = typer.Option(
+    None, "--config", callback=_show_config, help="shows the configuration"
+)
 
 
 @app.command(help="Reads respository description")
 def get_description(
-    folder: str = ".", description_file: str = DESCRIPTION_FILE
+    folder: str = ".",
+    description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
 ) -> Optional[str]:
     print(_get_description(file_path=Path(folder, description_file)))
 
 
 @app.command(help="Generates a status message based on the git staged changes")
 def status(
-    with_emojis: bool = EMOJIS,
-    model: str = MODEL,
-    api_key: str | None = API_KEY,
-    api_url: str | None = API_URL,
-    description_file: str = DESCRIPTION_FILE,
-    use_tools: bool = USE_TOOLS,
+    with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
+    model: str = Setting.MODEL.option,  # type: ignore
+    api_key: str | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None = Setting.API_URL.option,  # type: ignore
+    description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    use_tools: bool = Setting.USE_TOOLS.option,  # type: ignore
 ):
     generate(
         with_emojis=with_emojis,
@@ -177,14 +184,14 @@ def status(
     help="Generates a commit message based on the git staged changes for the prepare-commit-msg hook"
 )
 def generate(
-    with_emojis: bool = EMOJIS,
-    with_comments: bool = COMMENTS,
-    model: str = MODEL,
-    api_key: str | None = API_KEY,
-    api_url: str | None = API_URL,
-    description_file: str | None = DESCRIPTION_FILE,
-    use_tools: bool = USE_TOOLS,
-    manual: bool = MANUAL,
+    with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
+    with_comments: bool = Setting.COMMENTS.option,  # type: ignore
+    model: str = Setting.MODEL.option,  # type: ignore
+    api_key: str | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    use_tools: bool = Setting.USE_TOOLS.option,  # type: ignore
+    manual: bool = Setting.MANUAL.option,  # type: ignore
     manual_override: bool = MANUAL_OVERRIDE,
     output: TextIO = OUTPUT,
 ):
@@ -237,7 +244,7 @@ def _confirm(message: str, confirm: bool = CONFIRM):
 
 
 @app.command(
-    help="Sets the configuration setting value, if no value is given resets the configuration to the default value"
+    help="Sets the configuration value, if no value is given resets the configuration to the default value"
 )
 def set_config(
     setting: Setting,
@@ -270,7 +277,7 @@ def set_config(
 
 
 @app.callback()
-def _(version: bool | None = VERSION):
+def _(version: bool | None = VERSION, config: bool | None = CONFIG):
     pass
 
 

@@ -7,7 +7,7 @@ a = Analysis(
     ['src/git_llm_utils/main.py'],
     pathex=[],
     binaries=[],
-    datas=[
+    datas=[ # see https://github.com/openai/tiktoken/issues/80#issuecomment-1484965176
         (f'{litellm_dir}/litellm_core_utils/tokenizers/anthropic_tokenizer.json', 'litellm/litellm_core_utils/tokenizers')
     ],
     hiddenimports=[
