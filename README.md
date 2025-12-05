@@ -1,12 +1,12 @@
 # git-llm-utils
 
-Git hooks powered by LLMs: automatically generate meaningful commit messages based on your staged changes.
+Git hooks powered by LLMs: automatically generate meaningful commit messages based on your changes.
 
 ## What it does
 
 - Uses a Git hook (e.g. [`prepare-commit-msg`](prepare-commit-msg.sample)) to capture the staged diff.
-- Sends the diff to a configured LLM.
-- Inserts the generated summary as your commit message — ready to review or modify.
+- Sends the diff to a configured LLM such as a model in ollama or groq.
+- Inserts the summary of your changes as your commit message — ready to review or modify.
 - Helps you maintain clean, consistent, human-readable commit history without manual effort.
 
 ## Why use it
@@ -18,69 +18,76 @@ Git hooks powered by LLMs: automatically generate meaningful commit messages bas
 
 ## Getting started
 
-If you are building from the source:
+### Building from the source:
 
-1. Clone the repo
+1. Clone the repo: 
+```bash
+git clone git@github.com:pilardi/git-llm-utils.git
+```
 2. Make a copy of the [prepare commit hook](./prepare-commit-msg.sample) into `path/to/git-llm-utils/prepare-commit-msg`
-3. Update `/path/to/git-llm-utils/` to your working directoty in the `path/to/git-llm-utils/prepare-commit-msg` file
+```bash
+cp path/to/git-llm-utils/prepare-commit-msg.sample path/to/git-llm-utils/prepare-commit-msg
+```
+3. Update `path/to/git-llm-utils` in the `path/to/git-llm-utils/prepare-commit-msg` file with the directory where you cloned the repo
 4. Configure Git to use the hook:
-
 ```bash
 git config core.hooksPath path/to/git-llm-utils/prepare-commit-msg
 ```
-
 5. Ensure your environment (or config) provides credentials or access to a suitable LLM (see [Configuration](#configuration))
 6. Run: 
 ```bash
-path/to/git-llm-utils status
+uv --directory path/to/git-llm-utils run git-llm-utils status
 ``` 
 to see the generated message
-
-5. Create an alias to generate the message on demand: 
-
+7. Create an alias to generate the message on demand: 
 ```bash
 git config --global alias.llmc '!GIT_LLM_ON=True git commit'
 git llmc
 ```
-
-Conversly, disable manual mode and use regular `git commit` to get the message generated on every commit, ie:
+8. Conversly, disable manual mode and use regular `git commit` to get an LLM message generated on every commit, ie:
 ```bash
-path/to/git-llm-utils set-config manual --value False
+uv --directory path/to/git-llm-utils run git-llm-utils set-config manual --value False
 git commit
 ```
+### Using the binary
+
+TODO
 
 ## Usage
 
 See:
 
 ```bash
-path/to/git-llm-utils --help
+uv --directory path/to/git-llm-utils run git-llm-utils --help
 ```
 
 ## Configuration:
 See:
 
 ```bash
-path/to/git-llm-utils get-config --help
+uv --directory path/to/git-llm-utils run git-llm-utils get-config --help
 ```
 
+by default the application uses `ollama/qwen3-coder:480b-cloud` as the model, therefor you'd need to have [ollama](https://ollama.com/download) running in your machine or configure a host where ollama would be running (using `api_url`)
+
+### Settings
 All configurations are made using git config settings:
 
 - `emojis`: `True` will allow the llm to generate Emojis in the commit message
 - `comments`: `True` will generate the message with commented lines
 - `model`: `ollama/qwen3-coder:480b-cloud` use [Litellm](https://models.litellm.ai/) syntaxis
 - `api_key`: None
-- `api_url`: None (will use Litellm defaults)
+- `api_url`: None (will use Litellm defaults, for ollama it's `http://127.0.0.1:11434`)
 - `description_file`: `README.md` will use this file for context to the llm as as tool (if allowed)
 - `use_tools`: `False` will allow the LLM to access the description of your repository
-- `manual`: `True` if True will not generate the commit message unless the `GIT_LLM_ON=True`
+- `manual`: `True` if True will not generate the commit message for every commit, unless the env `GIT_LLM_ON=True` is set
 
 Use:
 
 ```bash
-path/to/git-llm-utils set-config --value value 
+uv --directory path/to/git-llm-utils run git-llm-utils set-config setting --value value 
 ```
-to change the setting
+to change the setting, where *setting* is any of the available [settings](#settings)
 
 ---
 

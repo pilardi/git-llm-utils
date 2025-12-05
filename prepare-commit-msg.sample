@@ -3,4 +3,4 @@ COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 SHA1=$3
 
-uv --directory path/to/git-llm-utils run src/git_llm_utils/main.py generate > $COMMIT_MSG_FILE.llm && cat - $COMMIT_MSG_FILE >> $COMMIT_MSG_FILE.llm && mv $COMMIT_MSG_FILE.llm $COMMIT_MSG_FILE
+uv --directory path/to/git-llm-utils run git-llm-utils generate > $COMMIT_MSG_FILE.llm && cat - $COMMIT_MSG_FILE >> $COMMIT_MSG_FILE.llm && mv $COMMIT_MSG_FILE.llm $COMMIT_MSG_FILE

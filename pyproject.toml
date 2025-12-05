@@ -26,6 +26,12 @@ build-backend = "hatchling.build"
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
 
+[tool.hatch.build.hooks.version]
+path = "src/git_llm_utils/__init__.py"
+template = '''
+__version__ = "{version}"
+'''
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/git_llm_utils"]
 
@@ -39,8 +45,7 @@ dev = [
 ]
 
 [tool.uv.build-backend]
-namespace = true
 module-name = "git_llm_utils"
 
 [project.scripts]
-git-llm-utils = "git_llm_utils:main"
+git-llm-utils = "git_llm_utils.main:app"

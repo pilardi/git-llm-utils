@@ -17,7 +17,11 @@ update:
 	uv lock
 
 dist: install
-	@echo "Installing dependencies ..."
+	@echo "Building package ..."
+	uv dist
+
+binary: install
+	@echo "Building binary ..."
 	pyinstaller git-llm-utils.spec
 
 tests:

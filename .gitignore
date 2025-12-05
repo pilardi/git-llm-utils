@@ -204,3 +204,9 @@ __marimo__/
 # VSCODE
 .vscode
 .python-version
+
+#Dynamic Versioning
+src/git_llm_utils/__init__.py
+
+# hook
+prepare-commit-msg

@@ -6,7 +6,7 @@ sys.path.append("src")
 
 from types import SimpleNamespace
 from typing import Any
-from git_llm_utils import generate
+from git_llm_utils.main import generate
 from git_llm_utils.llm_cli import LLMClient
 
 
