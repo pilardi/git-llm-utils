@@ -1,6 +1,6 @@
 from enum import Enum
+from git_llm_utils.utils import _bool, get_tomlib_project, read_file, read_version
 from git_llm_utils.git_commands import (
-    _bool,
     get_config as _get_config,
     get_default_setting as _get_default_setting,
     get_staged_changes,
@@ -12,11 +12,10 @@ from git_llm_utils.llm_cli import LLMClient
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
-from typing import Any, Dict, Optional, TextIO
+from typing import Any, Optional, TextIO
 
-import git_llm_utils
+
 import sys
-import tomllib
 import typer
 
 
@@ -88,46 +87,7 @@ class Setting(Enum):
     )
 
 
-def _get_tomlib_project() -> Dict:
-    try:
-        with open(Path("pyproject.toml"), mode="rb") as f:
-            data = tomllib.load(f)
-        return data["project"]
-    except Exception:
-        pass
-    return {}
-
-
-def _get_version(show: bool):
-    if show:
-        try:
-            v = git_llm_utils.__version__
-        except Exception:
-            v = "undefined"
-        print(f"Version is {v}")
-        raise typer.Exit()
-
-
-def _show_config(show: bool):
-    if show:
-        console = Console()
-        table = Table("Setting", "Default", "Value", "Description")
-        for setting in Setting:
-            table.add_row(setting.value, setting.factory, setting.default, setting.help)  # type: ignore
-        console.print(table)
-        raise typer.Exit()
-
-
-def _get_description(file_path: Path | None) -> Optional[str]:
-    if file_path is not None and file_path.exists():
-        with open(file_path, "r") as file:
-            return file.read()
-    else:
-        print(f"Description file {file_path} does not exist", file=sys.stderr)
-    return None
-
-
-app = typer.Typer(help=_get_tomlib_project().get("description", None))
+app = typer.Typer(help=get_tomlib_project().get("description", None))
 MANUAL_OVERRIDE = typer.Option(
     default=False,
     envvar="GIT_LLM_ON",
@@ -142,12 +102,7 @@ CONFIRM = typer.Option(
     help="Requests confirmation before changing a setting",
 )
 OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
-VERSION = typer.Option(
-    None, "--version", callback=_get_version, help="shows current version"
-)
-CONFIG = typer.Option(
-    None, "--config", callback=_show_config, help="shows the configuration"
-)
+VERBOSE = typer.Option(None, "--verbose", envvar="verbose", parser=_bool, hidden=True)
 
 
 @app.command(help="Reads respository description")
@@ -155,7 +110,7 @@ def get_description(
     folder: str = ".",
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
 ) -> Optional[str]:
-    print(_get_description(file_path=Path(folder, description_file)))
+    print(read_file(file_path=Path(folder, description_file)))
 
 
 @app.command(help="Generates a status message based on the git staged changes")
@@ -209,7 +164,7 @@ def generate(
             api_key=api_key,
             api_url=api_url,
             use_tools=use_tools and file_path is not None and file_path.exists(),
-            respository_description=lambda: _get_description(file_path),  # type: ignore
+            respository_description=lambda: read_file(file_path),  # type: ignore
         )
         for message in client.message(changes, stream=False):
             if with_comments:
@@ -276,8 +231,31 @@ def set_config(
             )
 
 
+def _show_version(show: bool):
+    if show:
+        print(f"Version is {read_version()}")
+        raise typer.Exit()
+
+
+def _show_config(show: bool):
+    if show:
+        console = Console()
+        table = Table("Setting", "Default", "Value", "Description")
+        for setting in Setting:
+            table.add_row(setting.value, setting.factory, setting.default, setting.help)  # type: ignore
+        console.print(table)
+        raise typer.Exit()
+
+
 @app.callback()
-def _(version: bool | None = VERSION, config: bool | None = CONFIG):
+def _(
+    version: bool | None = typer.Option(
+        None, "--version", callback=_show_version, help="shows the current version"
+    ),
+    config: bool | None = typer.Option(
+        None, "--config", callback=_show_config, help="shows the configuration"
+    ),
+):
     pass
 
 
