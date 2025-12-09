@@ -1,11 +1,14 @@
 from flask import Flask, jsonify, request
-import time
+from git_llm_utils.utils import _bool
+import os
 import sys
+import time
 
 app = Flask(__name__)
 
 
-@app.route("/openai/v1/chat/completions", methods=["POST"])
+# TODO run binary test with `./dist/git-llm-utils status --api-url http://127.0.0.1:8001 --model openai/test --api-key test`
+@app.route("/chat/completions", methods=["POST"])
 def mock_chat_completions():
     data = request.json
     messages = data.get("messages", [])
@@ -46,4 +49,7 @@ def mock_chat_completions():
 
 
 if __name__ == "__main__":
-    app.run(port=len(sys.argv) > 1 and int(sys.argv[1]) or 8001)
+    app.run(
+        port=len(sys.argv) > 1 and int(sys.argv[1]) or 8001,
+        debug=_bool(os.environ.get("DEBUG", "False")),
+    )

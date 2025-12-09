@@ -358,6 +358,7 @@ class LLMClient(BaseModel):
                 max_tokens=self.max_output_tokens,
                 stream=False,
                 reasoning_effort="medium",
+                drop_params=True,  # cross llm provider support
                 temperature=self.model_temperature,
                 verbosity="medium",
             )
