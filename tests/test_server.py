@@ -7,14 +7,13 @@ import time
 app = Flask(__name__)
 
 
-# TODO run binary test with `./dist/git-llm-utils status --api-url http://127.0.0.1:8001 --model openai/test --api-key test`
 @app.route("/chat/completions", methods=["POST"])
 def mock_chat_completions():
     data = request.json
     messages = data.get("messages", [])
     last_message = messages and messages[-1].get("content", "") or None
     test_response = (
-        last_message and f"Test Changes: {last_message}" or "What are the changes?"
+        last_message and f"Test Changes:\n{last_message}" or "What are the changes?"
     )
     if data.get("stream"):
 
