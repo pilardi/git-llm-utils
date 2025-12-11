@@ -12,16 +12,20 @@ def _bool(value: str) -> bool:
     return value and value.lower() in ("1", "true", "yes") or False
 
 
-VERBOSE = _bool(os.environ.get("verbose", ""))
+GIT_LLM_UTILS_DEBUG = "GIT_LLM_UTILS_DEBUG"
+DEBUG = _bool(os.environ.get(GIT_LLM_UTILS_DEBUG, ""))
 
 
 def report_error(message: str, *args, **kwargs):
-    if VERBOSE:
+    if DEBUG:
         print(message, file=sys.stderr, *args, **kwargs)
 
 
 def execute_command(
-    command: list[str], abort_on_error: bool = True, verbose: bool = VERBOSE
+    command: list[str],
+    abort_on_error: bool = True,
+    cwd: str | None = None,
+    verbose: bool = DEBUG,
 ) -> str | None:
     try:
         process = subprocess.run(
@@ -32,6 +36,7 @@ def execute_command(
             creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
             encoding="utf-8",
             errors="replace",
+            cwd=cwd,
         )
         return process.stdout
     except subprocess.CalledProcessError as e:

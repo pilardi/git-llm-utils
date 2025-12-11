@@ -19,7 +19,7 @@ check: check-formatting check-code
 
 tests:
 	@echo "== Running python tests =="
-	uv run pytest
+	uv run pytest -m "not integration"
 
 test-src-dist: dist
 	@echo "== Running python tests over source dist =="
@@ -51,18 +51,8 @@ dist/git-llm-utils: install
 	@echo "Building binary ..."
 	pyinstaller git-llm-utils.spec
 
-.ONESHELL:
-test/dist/git-llm-utils: dist/git-llm-utils 
-	@uv run python tests/test_server.py &
-	SERVER_ID=$$!
-	@WORK_DIR=$$(pwd)
-	@TEMP_DIR=$$(mktemp -d)
-	cd $${TEMP_DIR} && git init . && echo "test" > test.txt && git add test.txt
-	$${WORK_DIR}/dist/git-llm-utils status --api-url http://127.0.0.1:8001 --model openai/test --api-key test > status.out
-	$${WORK_DIR}/dist/git-llm-utils generate --api-url http://127.0.0.1:8001 --model openai/test --api-key test --no-manual > generate.out
-	$${WORK_DIR}/dist/git-llm-utils generate --api-url http://127.0.0.1:8001 --model openai/test --api-key test --no-manual --with-comments > generate-comments.out
-	kill $${SERVER_ID}
-
+tests/integration: dist/git-llm-utils
+	uv run pytest -m "integration"
 
 clean-dist:
 	@echo "Removing dist ..."

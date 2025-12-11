@@ -1,5 +1,11 @@
 from enum import Enum
-from git_llm_utils.utils import _bool, get_tomlib_project, read_file, read_version
+from git_llm_utils.utils import (
+    _bool,
+    get_tomlib_project,
+    read_file,
+    read_version,
+    GIT_LLM_UTILS_DEBUG,
+)
 from git_llm_utils.git_commands import (
     get_config as _get_config,
     get_default_setting as _get_default_setting,
@@ -87,7 +93,9 @@ class Setting(Enum):
     )
 
 
-app = typer.Typer(help=get_tomlib_project().get("description", None))
+app = typer.Typer(
+    help=get_tomlib_project().get("description", None), pretty_exceptions_enable=False
+)
 MANUAL_OVERRIDE = typer.Option(
     default=False,
     envvar="GIT_LLM_ON",
@@ -102,13 +110,22 @@ CONFIRM = typer.Option(
     help="Requests confirmation before changing a setting",
 )
 OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
-VERBOSE = typer.Option(None, "--verbose", envvar="verbose", parser=_bool, hidden=True)
+DEBUG = typer.Option(
+    None,
+    "--debug",
+    help="enables debug information when it runs into a runtime failure",
+    callback=lambda d: setattr(app, "pretty_exceptions_enable", d),
+    envvar=GIT_LLM_UTILS_DEBUG,
+    parser=_bool,
+    hidden=True,
+)
 
 
 @app.command(help="Reads respository description")
-def get_description(
+def description(
     folder: str = ".",
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    debug: bool = DEBUG,
 ) -> Optional[str]:
     print(read_file(file_path=Path(folder, description_file)))
 
@@ -121,6 +138,7 @@ def status(
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
     use_tools: bool = Setting.USE_TOOLS.option,  # type: ignore
+    debug: bool = DEBUG,
 ):
     generate(
         with_emojis=with_emojis,
@@ -132,6 +150,7 @@ def status(
         use_tools=use_tools,
         manual=False,
         output=sys.stdout,
+        debug=debug,
     )
 
 
@@ -149,6 +168,7 @@ def generate(
     manual: bool = Setting.MANUAL.option,  # type: ignore
     manual_override: bool = MANUAL_OVERRIDE,
     output: TextIO = OUTPUT,
+    debug: bool = DEBUG,
 ):
     if manual and not manual_override:
         return
@@ -183,7 +203,11 @@ def generate(
 
 
 @app.command(help="Reads the configuration value")
-def get_config(setting: Setting, scope: Scope = Scope.LOCAL):
+def get_config(
+    setting: Setting,
+    scope: Scope = Scope.LOCAL,
+    debug: bool = DEBUG,
+):
     config = _get_config(setting.value)
     if config:
         print(config)
@@ -206,6 +230,7 @@ def set_config(
     value: str | None = None,
     scope: Scope = Scope.LOCAL,
     confirm: bool = CONFIRM,
+    debug: bool = DEBUG,
 ):
     config = _get_config(setting.value)
     if value:
@@ -255,6 +280,7 @@ def _(
     config: bool | None = typer.Option(
         None, "--config", callback=_show_config, help="shows the configuration"
     ),
+    debug: bool = DEBUG,
 ):
     pass
 
