@@ -1,11 +1,17 @@
 from flask import Flask, jsonify, request
-from git_llm_utils.utils import _bool, execute_command
+from git_llm_utils.utils import _bool, execute_command, execute_background_command
 import os
 import pytest
+import signal
 import sys
 import time
 
 app = Flask(__name__)
+
+
+def _read_file(file_path):
+    with open(f"{os.getcwd()}/{file_path}", "r") as f:
+        return f.read()
 
 
 @app.route("/chat/completions", methods=["POST"])
@@ -52,30 +58,133 @@ def mock_chat_completions():
         )
 
 
+def _start_mock_server(port: int = 8001, debug: bool = False):
+    print(f"Starting Mock Server on port: {port}, debug={debug}")
+    app.run(
+        port=port,
+        debug=debug,
+    )
+
+
+@pytest.fixture(scope="session")
+def mock_server(request):
+    def shudown_server(process):
+        print("Stopping Mock server")
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except Exception:
+            pass
+
+    port = 8001  # REVIEW we might want to select an open port
+    process = execute_background_command(["uv", "run", "python", __file__, str(port)])
+    time.sleep(1)
+    if process.poll() is not None:  # type: ignore
+        stdout, stderr = process.communicate()  # type: ignore
+        raise RuntimeError(
+            f"Server failed to start mock server: {stdout.decode()}/{stderr.decode()}"
+        )
+    request.addfinalizer(lambda: shudown_server(process))
+    return f"http://127.0.0.1:{port}"
+
+
+@pytest.fixture(scope="session")
+def cmd():
+    return f"{os.getcwd()}/dist/git-llm-utils"
+
+
+@pytest.fixture(scope="session")
+def repository(tmp_path_factory):
+    repository = tmp_path_factory.mktemp("repository")
+    print(execute_command(["git", "init", "."], cwd=repository))
+    print(
+        execute_command(
+            ["cp", f"{os.getcwd()}/tests/files/test.txt", "."], cwd=repository
+        )
+    )
+    print(execute_command(["git", "add", "test.txt"], cwd=repository))
+    return repository
+
+
 @pytest.mark.integration
-def test_integration(tmp_path):
-    """
-    TODO
-        @uv run python tests/test_server.py &
-        SERVER_ID=$$!
-        @WORK_DIR=$$(pwd)
-        @TEMP_DIR=$$(mktemp -d)
-        cd $${TEMP_DIR} && git init . && echo "test" > test.txt && git add test.txt
-        $${WORK_DIR}/dist/git-llm-utils status --api-url http://127.0.0.1:8001 --model openai/test --api-key test > status.out
-        $${WORK_DIR}/dist/git-llm-utils generate --api-url http://127.0.0.1:8001 --model openai/test --api-key test --no-manual > generate.out
-        $${WORK_DIR}/dist/git-llm-utils generate --api-url http://127.0.0.1:8001 --model openai/test --api-key test --no-manual --with-comments > generate-comments.out
-        GIT_LLM_UTILS_REPO="$${TEMP_DIR}" && uv --directory "$${WORK_DIR}" run pytest -m "integration"
-        kill $${SERVER_ID}
-    """
-    if not tmp_path:
-        pytest.fail(f"integration tests need a test path for creating the repository")
-    repository = tmp_path
-    print(f"Testing {repository}")
-    # print(execute_command(["dist/git-llm-utils", "--help"], cwd=repository))
+def test_status(cmd, repository, mock_server):
+    output = execute_command(
+        [
+            cmd,
+            "status",
+            "--api-url",
+            mock_server,
+            "--model",
+            "openai/test",
+            "--api-key",
+            "test",
+            "--no-with-emojis",
+        ],
+        cwd=repository,
+    )
+    assert _read_file("tests/files/status.out") == output
+
+
+@pytest.mark.integration
+def test_status_with_emojis(cmd, repository, mock_server):
+    output = execute_command(
+        [
+            cmd,
+            "status",
+            "--api-url",
+            mock_server,
+            "--model",
+            "openai/test",
+            "--api-key",
+            "test",
+            "--with-emojis",
+        ],
+        cwd=repository,
+    )
+    assert _read_file("tests/files/status_with_emojis.out") == output
+
+
+@pytest.mark.integration
+def test_generate_with_no_comments(cmd, repository, mock_server):
+    output = execute_command(
+        [
+            cmd,
+            "generate",
+            "--api-url",
+            mock_server,
+            "--model",
+            "openai/test",
+            "--api-key",
+            "test",
+            "--no-manual",
+            "--no-with-comments",
+        ],
+        cwd=repository,
+    )
+    assert _read_file("tests/files/generate_with_no_comments.out") == output
+
+
+@pytest.mark.integration
+def test_generate_with_comments(cmd, repository, mock_server):
+    output = execute_command(
+        [
+            cmd,
+            "generate",
+            "--api-url",
+            mock_server,
+            "--model",
+            "openai/test",
+            "--api-key",
+            "test",
+            "--no-manual",
+            "--with-comments",
+        ],
+        cwd=repository,
+    )
+    assert _read_file("tests/files/generate_with_comments.out") == output
 
 
 if __name__ == "__main__":
-    app.run(
+    _start_mock_server(
         port=len(sys.argv) > 1 and int(sys.argv[1]) or 8001,
         debug=_bool(os.environ.get("DEBUG", "False")),
     )

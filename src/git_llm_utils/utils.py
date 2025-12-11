@@ -16,9 +16,32 @@ GIT_LLM_UTILS_DEBUG = "GIT_LLM_UTILS_DEBUG"
 DEBUG = _bool(os.environ.get(GIT_LLM_UTILS_DEBUG, ""))
 
 
-def report_error(message: str, *args, **kwargs):
-    if DEBUG:
+def report_error(message: str, debug: bool = DEBUG, *args, **kwargs):
+    if debug:
         print(message, file=sys.stderr, *args, **kwargs)
+
+
+def execute_background_command(
+    command: list[str],
+    abort_on_error: bool = True,
+    cwd: str | None = None,
+    verbose: bool = DEBUG,
+) -> subprocess.Popen | None:
+    try:
+        return subprocess.Popen(
+            command,
+            cwd=cwd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            preexec_fn=os.setsid,
+        )
+    except subprocess.CalledProcessError as e:
+        if abort_on_error:
+            raise Exception(f"Failed to execute background command: {command}", e)
+        report_error(
+            f"Failed to execute background command: {command} -> {e}", debug=verbose
+        )
+    return None
 
 
 def execute_command(
@@ -41,8 +64,8 @@ def execute_command(
         return process.stdout
     except subprocess.CalledProcessError as e:
         if abort_on_error:
-            raise Exception(f"Failed to execute git command: {command}", e)
-        report_error(f"Failed to execute git command: {command} -> {e}")
+            raise Exception(f"Failed to execute command: {command}", e)
+        report_error(f"Failed to execute command: {command} -> {e}", debug=verbose)
     return None
 
 
