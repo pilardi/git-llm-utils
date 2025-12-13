@@ -2,5 +2,6 @@
 COMMIT_MSG_FILE=$1
 COMMIT_SOURCE=$2
 SHA1=$3
+GIT_LLM_UTILS_PATH="uv --directory path/to/git-llm-utils run git-llm-utils"
 
-uv --directory path/to/git-llm-utils run git-llm-utils generate > $COMMIT_MSG_FILE.llm && cat - $COMMIT_MSG_FILE >> $COMMIT_MSG_FILE.llm && mv $COMMIT_MSG_FILE.llm $COMMIT_MSG_FILE
+$GIT_LLM_UTILS_PATH generate > $COMMIT_MSG_FILE.llm && cat - $COMMIT_MSG_FILE >> $COMMIT_MSG_FILE.llm && mv $COMMIT_MSG_FILE.llm $COMMIT_MSG_FILE

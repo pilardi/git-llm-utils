@@ -91,6 +91,17 @@ def read_file(file_path: Path | None) -> Optional[str]:
     return None
 
 
+def write_file(file_path: Path, content: str = "", overwrite: bool = False):
+    if not file_path.exists() or overwrite:
+        try:
+            with open(file_path, "w") as file:
+                file.write(content)
+        except Exception as e:
+            report_error(f"Failed to write {file_path}: {e}")
+    else:
+        report_error(f"File {file_path} already exist, use overwrite if needed")
+
+
 def read_version() -> str:
     try:
         return git_llm_utils.__version__

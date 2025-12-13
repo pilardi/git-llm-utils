@@ -1,36 +1,22 @@
 from enum import Enum
 from typing import Optional
-from git_llm_utils.utils import execute_command, _bool
+from git_llm_utils.utils import execute_command
 
 
 class Scope(Enum):
-    GLOBAL = "--global"  # use global config fil
-    SYSTEM = "--system"  # use system config file
-    LOCAL = "--local"  # use repository config file
-
-
-def get_default_setting(
-    setting: str,
-    default: str | None,
-    flag: bool = False,
-    help: str | None = None,
-    abort_on_error: bool = False,
-):
-    value = get_config(setting, default, abort_on_error=abort_on_error)
-    return (
-        setting,
-        flag,
-        flag and str(_bool(value)) or value,  # type: ignore
-        flag and str(_bool(default)) or default,  # type: ignore
-        help,
-    )
+    GLOBAL = "global"  # use global config fil
+    SYSTEM = "system"  # use system config file
+    LOCAL = "local"  # use repository config file
 
 
 def get_config(
-    key: str, default_value: str | None = None, abort_on_error: bool = False
+    key: str,
+    default_value: str | None = None,
+    scope: Scope = Scope.LOCAL,
+    abort_on_error: bool = False,
 ) -> Optional[str]:
     output = execute_command(
-        ["git", "config", "--get", f"git-llm-utils.{key}"],
+        ["git", "config", "--get", f"--{scope.value}", f"git-llm-utils.{key}"],
         abort_on_error=abort_on_error,
     )
     return output and str.strip(output) or default_value
@@ -43,7 +29,7 @@ def set_config(
         [
             "git",
             "config",
-            f"{scope.value}",
+            f"--{scope.value}",
             "--replace-all",
             f"git-llm-utils.{key}",
             f"{value}",
@@ -54,7 +40,7 @@ def set_config(
 
 def unset_config(key: str, scope: Scope = Scope.LOCAL, abort_on_error: bool = True):
     execute_command(
-        ["git", "config", f"{scope.value}", "--unset", f"git-llm-utils.{key}"],
+        ["git", "config", f"--{scope.value}", "--unset", f"git-llm-utils.{key}"],
         abort_on_error=abort_on_error,
     )
 

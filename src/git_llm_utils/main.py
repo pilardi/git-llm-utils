@@ -8,7 +8,6 @@ from git_llm_utils.utils import (
 )
 from git_llm_utils.git_commands import (
     get_config as _get_config,
-    get_default_setting as _get_default_setting,
     get_staged_changes,
     set_config as _set_config,
     unset_config,
@@ -18,7 +17,7 @@ from git_llm_utils.llm_cli import LLMClient
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
-from typing import Any, Optional, TextIO
+from typing import Any, Callable, Optional, TextIO
 
 
 import sys
@@ -26,70 +25,83 @@ import typer
 
 
 class Setting(Enum):
-    def __new__(
-        cls,
-        value,
-        flag: bool,
-        default: Any | None,
-        factory: Any | None,
-        help: str | None,
+    @staticmethod
+    def __setting__(
+        name: str,
+        factory: Any | None = None,
+        parser: Callable[[str], Any] | Any = None,
+        help: str | None = None,
     ):
-        enum = object.__new__(cls)
-        enum._value_ = value
-        enum.flag = flag  # type: ignore
-        enum.default = default  # type: ignore
-        enum.factory = factory  # type: ignore
-        enum.help = help  # type: ignore
-        enum.option = typer.Option(  # type: ignore
+        default = _get_config(name, factory)
+        option = typer.Option(  # type: ignore
             default=default,
             help=help,
+            parser=parser,
+            show_default=parser != _bool or not factory,
         )
+
+        return (
+            name,
+            str(factory),
+            option,
+        )
+
+    def __new__(
+        cls,
+        name: str,
+        factory: Any,
+        option: typer.Option,  # type: ignore
+    ):
+        enum = object.__new__(cls)
+        enum._value_ = name
+        enum.factory = factory  # type: ignore
+        enum.option = option  # type: ignore
         return enum
 
-    EMOJIS = _get_default_setting(
+    EMOJIS = __setting__(
         "emojis",
-        "True",
-        flag=True,
-        help="If true will instruct the LLMs to add applicable emojis",
+        factory=True,
+        parser=_bool,
+        help="If true will instruct the LLMs to add applicable emojis (see --config)",
     )
-    COMMENTS = _get_default_setting(
+    COMMENTS = __setting__(
         "comments",
-        "True",
-        flag=True,
-        help="If true will generate the commit message commented out so that saving will abort the commit",
+        factory=True,
+        parser=_bool,
+        help="If true will generate the commit message commented out so that saving will abort the commit (see --config)",
     )
-    MODEL = _get_default_setting(
+    MODEL = __setting__(
         "model",
         "ollama/qwen3-coder:480b-cloud",
-        help="The model to use (has to be available) according to the LiteLLM provider, as in ollama/llama2 or openai/gpt-5-mini",
+        help="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
     )
-    API_KEY = _get_default_setting(
+    API_KEY = __setting__(
         "api_key",
-        None,
         help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
     )
-    API_URL = _get_default_setting(
+    API_URL = __setting__(
         "api_url",
-        None,
         help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
     )
-    DESCRIPTION_FILE = _get_default_setting(
-        "description_file",
+    DESCRIPTION_FILE = __setting__(
+        "description-file",
         "README.md",
         help="Description file of the purpose of the respository, usually a README.md file",
     )
-    USE_TOOLS = _get_default_setting(
+    TOOLS = __setting__(
         "tools",
-        "False",
-        flag=True,
+        factory=False,
+        parser=_bool,
         help="Whether to allow tools usage or not while requesting llm responses",
     )
-    MANUAL = _get_default_setting(
+    MANUAL = __setting__(
         "manual",
-        "True",
-        flag=True,
-        help="""If true will only generate the status message when explicitely called with called with the environment variable GIT_LLM_ON set on True, 
-        you can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`""",
+        factory=True,
+        parser=_bool,
+        help="""If true will only generate the commit status message when called with the GIT_LLM_ON environment variable set on True.
+You can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
+If you want to generate a commit message for every commit, set `set-config manual --value False` (see --config)
+        """,
     )
 
 
@@ -100,9 +112,6 @@ MANUAL_OVERRIDE = typer.Option(
     default=False,
     envvar="GIT_LLM_ON",
     hidden=True,
-    help=""""
-        When manual mode is acive, the 'GIT_LLM_ON' has to be set, this is used with the prepare message hook to prevent generating the llm comment on every commit
-    """,
 )
 CONFIRM = typer.Option(
     None,
@@ -137,7 +146,7 @@ def status(
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    use_tools: bool = Setting.USE_TOOLS.option,  # type: ignore
+    tools: bool = Setting.TOOLS.option,  # type: ignore
     debug: bool = DEBUG,
 ):
     generate(
@@ -147,7 +156,7 @@ def status(
         api_key=api_key,
         api_url=api_url,
         description_file=description_file,
-        use_tools=use_tools,
+        tools=tools,
         manual=False,
         output=sys.stdout,
         debug=debug,
@@ -164,7 +173,7 @@ def generate(
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    use_tools: bool = Setting.USE_TOOLS.option,  # type: ignore
+    tools: bool = Setting.TOOLS.option,  # type: ignore
     manual: bool = Setting.MANUAL.option,  # type: ignore
     manual_override: bool = MANUAL_OVERRIDE,
     output: TextIO = OUTPUT,
@@ -183,7 +192,7 @@ def generate(
             use_emojis=with_emojis,
             api_key=api_key,
             api_url=api_url,
-            use_tools=use_tools and file_path is not None and file_path.exists(),
+            use_tools=tools and file_path is not None and file_path.exists(),
             respository_description=lambda: read_file(file_path),  # type: ignore
         )
         for message in client.message(changes, stream=False):
@@ -208,11 +217,11 @@ def get_config(
     scope: Scope = Scope.LOCAL,
     debug: bool = DEBUG,
 ):
-    config = _get_config(setting.value)
+    config = _get_config(setting.value, scope=scope)
     if config:
         print(config)
     else:
-        print(f"{setting.default} [default-value]")  # type: ignore
+        print(f"{setting.option.default} [default-value]")  # type: ignore
 
 
 def _confirm(message: str, confirm: bool = CONFIRM):
@@ -234,8 +243,8 @@ def set_config(
 ):
     config = _get_config(setting.value)
     if value:
-        if setting.flag:  # type: ignore
-            value = _bool(value)  # type: ignore
+        if setting.option.parser:  # type: ignore
+            value = setting.option.parser(value)  # type: ignore
         _confirm(
             f"Are you sure you want to update the setting: {setting.value} from {config} to {value}?",
             confirm=confirm,
@@ -265,11 +274,32 @@ def _show_version(show: bool):
 def _show_config(show: bool):
     if show:
         console = Console()
-        table = Table("Setting", "Default", "Value", "Description")
+        table = Table("Setting", "Factory", "Default", "Description")
         for setting in Setting:
-            table.add_row(setting.value, setting.factory, setting.default, setting.help)  # type: ignore
+            table.add_row(
+                setting.value,
+                setting.factory,  # type: ignore
+                str(setting.option.default),  # type: ignore
+                setting.option.help,  # type: ignore
+            )  # type: ignore
         console.print(table)
         raise typer.Exit()
+
+
+@app.command(help="Installs the commit message hook (WIP)", hidden=True)
+def install_hook(
+    scope: Scope = Scope.LOCAL,
+    confirm: bool = CONFIRM,
+):
+    program_name = sys.argv[0]
+    _confirm(
+        f"Are you sure you want to install the commit hook using {program_name}?",
+        confirm=confirm,
+    )
+    ## REVIEW we can embedd the file with the dist or generate it in runtime
+    ## the make file could also have a target to install the commit hook
+    print(read_file(file_path=Path("prepare-commit-msg.sample")))
+    typer.Abort()
 
 
 @app.callback()
@@ -278,7 +308,7 @@ def _(
         None, "--version", callback=_show_version, help="shows the current version"
     ),
     config: bool | None = typer.Option(
-        None, "--config", callback=_show_config, help="shows the configuration"
+        None, "--config", callback=_show_config, help="shows the configuration options"
     ),
     debug: bool = DEBUG,
 ):
