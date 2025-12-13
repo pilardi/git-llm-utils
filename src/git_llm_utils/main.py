@@ -33,11 +33,13 @@ class Setting(Enum):
         help: str | None = None,
     ):
         default = _get_config(name, factory)
+        if parser == _bool:
+            help = f"{help} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{name}]"
         option = typer.Option(  # type: ignore
             default=default,
             help=help,
             parser=parser,
-            show_default=parser != _bool or not factory,
+            show_default=parser != _bool,
         )
 
         return (
@@ -68,7 +70,7 @@ class Setting(Enum):
         "comments",
         factory=True,
         parser=_bool,
-        help="If true will generate the commit message commented out so that saving will abort the commit (see --config)",
+        help="If true will generate the commit message commented out so that saving it will exclude it from the commit message (see --config)",
     )
     MODEL = __setting__(
         "model",

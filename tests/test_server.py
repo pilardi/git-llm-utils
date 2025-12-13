@@ -7,13 +7,15 @@ from git_llm_utils.utils import (
     write_file,
 )
 from pathlib import Path
-from typing import Optional
+from typing import Callable, Optional
 import os
 import pytest
 import re
 import signal
 import sys
 import time
+
+API_KEY_TOKEN = "test"
 
 app = Flask(__name__)
 
@@ -22,7 +24,31 @@ def _read_file(file_path, base_path: str = os.getcwd()) -> Optional[str]:
     return read_file(file_path=Path(f"{base_path}/{file_path}"))
 
 
-@app.route("/chat/completions", methods=["POST"])
+def _require_token_bearer(auth_token: str = API_KEY_TOKEN):
+    """
+    Requires the given bearer auth header in the request
+    """
+
+    def decorate(f: Callable):
+        def auth(*args, **kwargs):
+            auth_header = request.headers.get("Authorization")
+            if not auth_header:
+                return "Not Authorization", 401
+            parts = auth_header.split()
+            if parts[0].lower() != "bearer" or len(parts) == 1 or len(parts) > 2:
+                return "Invalid Authorization", 401
+            token = parts[1]
+            if token != auth_token:
+                return "Unauthorized Token", 403
+            return f(*args, **kwargs)
+
+        return auth
+
+    return decorate
+
+
+@app.route("/chat/completions", methods=["POST"])  # type: ignore
+@_require_token_bearer()
 def mock_chat_completions():
     data = request.json
     messages = data.get("messages", [])
@@ -83,6 +109,7 @@ def mock_server(request):
         except Exception:
             pass
 
+    print("Starting Mock server")
     port = 8001  # REVIEW we might want to select an open port
     process = execute_background_command(["uv", "run", "python", __file__, str(port)])
     time.sleep(1)
@@ -120,7 +147,7 @@ def test_status_with_no_emojis(cmd, repository, mock_server):
         "--model",
         "openai/test",
         "--api-key",
-        "test",
+        API_KEY_TOKEN,
         "--no-with-emojis",
     ]
     assert status == execute_command(
@@ -149,7 +176,7 @@ def test_status_with_emojis(cmd, repository, mock_server):
         "--model",
         "openai/test",
         "--api-key",
-        "test",
+        API_KEY_TOKEN,
         "--with-emojis",
     ]
     assert status == execute_command(
@@ -178,7 +205,7 @@ def test_generate_with_no_comments(cmd, repository, mock_server):
         "--model",
         "openai/test",
         "--api-key",
-        "test",
+        API_KEY_TOKEN,
         "--no-manual",
         "--no-with-comments",
     ]
@@ -208,7 +235,7 @@ def test_generate_with_comments(cmd, repository, mock_server):
         "--model",
         "openai/test",
         "--api-key",
-        "test",
+        API_KEY_TOKEN,
         "--no-manual",
         "--with-comments",
     ]
