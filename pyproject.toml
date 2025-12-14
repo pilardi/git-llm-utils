@@ -50,9 +50,3 @@ module-name = "git_llm_utils"
 
 [project.scripts]
 git-llm-utils = "git_llm_utils.main:app"
-
-[tool.pytest]
-markers = [
-    "unit: these are unit tests meant to be run against the source code",
-    "integration: these are integration tests only meant to be run against the installable package",
-]

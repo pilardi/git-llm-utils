@@ -123,8 +123,8 @@ def mock_server(request):
 
 
 @pytest.fixture(scope="session")
-def cmd():
-    return f"{os.getcwd()}/dist/git-llm-utils"
+def cmd(request):
+    return request.config.getoption("--cmd").split()
 
 
 @pytest.fixture(scope="session")
@@ -139,8 +139,7 @@ def repository(tmp_path_factory):
 @pytest.mark.integration
 def test_status_with_no_emojis(cmd, repository, mock_server):
     status = _read_file("tests/files/status.out")
-    args = [
-        cmd,
+    args = cmd + [
         "status",
         "--api-url",
         mock_server,
@@ -155,7 +154,7 @@ def test_status_with_no_emojis(cmd, repository, mock_server):
         cwd=repository,
     )
     execute_command(  # update settings
-        [cmd, "set-config", "emojis", "--scope", "local", "--value", "False"],
+        cmd + ["set-config", "emojis", "--scope", "local", "--value", "False"],
         cwd=repository,
     )
     del args[-1]
@@ -168,8 +167,7 @@ def test_status_with_no_emojis(cmd, repository, mock_server):
 @pytest.mark.integration
 def test_status_with_emojis(cmd, repository, mock_server):
     status = _read_file("tests/files/status_with_emojis.out")
-    args = [
-        cmd,
+    args = cmd + [
         "status",
         "--api-url",
         mock_server,
@@ -184,7 +182,7 @@ def test_status_with_emojis(cmd, repository, mock_server):
         cwd=repository,
     )
     execute_command(  # update settings
-        [cmd, "set-config", "emojis", "--scope", "local", "--value", "True"],
+        cmd + ["set-config", "emojis", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
     del args[-1]
@@ -197,8 +195,7 @@ def test_status_with_emojis(cmd, repository, mock_server):
 @pytest.mark.integration
 def test_generate_with_no_comments(cmd, repository, mock_server):
     status = _read_file("tests/files/generate_with_no_comments.out")
-    args = [
-        cmd,
+    args = cmd + [
         "generate",
         "--api-url",
         mock_server,
@@ -214,7 +211,7 @@ def test_generate_with_no_comments(cmd, repository, mock_server):
         cwd=repository,
     )
     execute_command(  # update settings
-        [cmd, "set-config", "comments", "--scope", "local", "--value", "False"],
+        cmd + ["set-config", "comments", "--scope", "local", "--value", "False"],
         cwd=repository,
     )
     del args[-1]
@@ -227,8 +224,7 @@ def test_generate_with_no_comments(cmd, repository, mock_server):
 @pytest.mark.integration
 def test_generate_with_comments(cmd, repository, mock_server):
     status = _read_file("tests/files/generate_with_comments.out")
-    args = [
-        cmd,
+    args = cmd + [
         "generate",
         "--api-url",
         mock_server,
@@ -244,7 +240,7 @@ def test_generate_with_comments(cmd, repository, mock_server):
         cwd=repository,
     )
     execute_command(  # update settings
-        [cmd, "set-config", "comments", "--scope", "local", "--value", "True"],
+        cmd + ["set-config", "comments", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
     del args[-1]
@@ -260,13 +256,13 @@ def test_hook(cmd, repository, mock_server):
     content = _read_file(f"{hook}.sample")
     content = re.sub(
         r"GIT_LLM_UTILS_PATH=\".*\"",
-        f'GIT_LLM_UTILS_PATH="{cmd}"',
+        f'GIT_LLM_UTILS_PATH="{" ".join(cmd)}"',
         content,  # type: ignore
     )
     hook_file = f"{repository}/{hook}"
     write_file(Path(hook_file), content=content)
     execute_command(  # update settings
-        [cmd, "set-config", "manual", "--scope", "local", "--value", "True"],
+        cmd + ["set-config", "manual", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
     ### TODO add hook with git, add a change to the repo and commit it verity it doesn't fail
