@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 import git_llm_utils
 import os
@@ -49,6 +49,7 @@ def execute_command(
     abort_on_error: bool = True,
     cwd: str | None = None,
     verbose: bool = DEBUG,
+    valid_codes: Iterable[int] = [0],
 ) -> str | None:
     try:
         process = subprocess.run(
@@ -63,9 +64,10 @@ def execute_command(
         )
         return process.stdout
     except subprocess.CalledProcessError as e:
-        if abort_on_error:
-            raise Exception(f"Failed to execute command: {command}", e)
-        report_error(f"Failed to execute command: {command} -> {e}", debug=verbose)
+        if e.returncode not in valid_codes:
+            if abort_on_error:
+                raise Exception(f"Failed to execute command: {command}", e)
+            report_error(f"Failed to execute command: {command} -> {e}", debug=verbose)
     return None
 
 
@@ -79,27 +81,33 @@ def get_tomlib_project() -> Dict:
         return {}
 
 
-def read_file(file_path: Path | None) -> Optional[str]:
+def read_file(file_path: Path | None, debug: bool = DEBUG) -> Optional[str]:
     if file_path is not None and file_path.exists():
         try:
             with open(file_path, "r") as file:
                 return file.read()
         except Exception as e:
-            report_error(f"Failed to read {file_path}: {e}")
+            report_error(f"Failed to read {file_path}: {e}", debug=debug)
     else:
-        report_error(f"File {file_path} does not exist")
+        report_error(f"File {file_path} does not exist", debug=debug)
     return None
 
 
-def write_file(file_path: Path, content: str = "", overwrite: bool = False):
+def write_file(
+    file_path: Path, content: str = "", overwrite: bool = False, debug: bool = DEBUG
+) -> bool:
     if not file_path.exists() or overwrite:
         try:
             with open(file_path, "w") as file:
                 file.write(content)
+                return True
         except Exception as e:
-            report_error(f"Failed to write {file_path}: {e}")
+            report_error(f"Failed to write {file_path}: {e}", debug=debug)
     else:
-        report_error(f"File {file_path} already exist, use overwrite if needed")
+        report_error(
+            f"File {file_path} already exist, use overwrite if needed", debug=debug
+        )
+    return False
 
 
 def read_version() -> str:

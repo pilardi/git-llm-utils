@@ -2,8 +2,10 @@ from enum import Enum
 from git_llm_utils.utils import (
     _bool,
     get_tomlib_project,
-    read_file,
     read_version,
+    read_file,
+    write_file,
+    execute_command,
     GIT_LLM_UTILS_DEBUG,
 )
 from git_llm_utils.git_commands import (
@@ -22,6 +24,9 @@ from typing import Any, Callable, Optional, TextIO
 
 import sys
 import typer
+
+OVERRIDE = "GIT_LLM_ON"
+ALIAS = f"!{OVERRIDE}=True git commit"
 
 
 class Setting(Enum):
@@ -100,8 +105,8 @@ class Setting(Enum):
         "manual",
         factory=True,
         parser=_bool,
-        help="""If true will only generate the commit status message when called with the GIT_LLM_ON environment variable set on True.
-You can set an alias such as `git config --global alias.llmc '!GIT_LLM_ON=True git commit'`
+        help=f"""If true will only generate the commit status message when called with the {OVERRIDE} environment variable set on True.
+You can set an alias such as `git config --global alias.llmc '{ALIAS}'`
 If you want to generate a commit message for every commit, set `set-config manual --value False` (see --config)
         """,
     )
@@ -111,7 +116,8 @@ app = typer.Typer(
     help=get_tomlib_project().get("description", None), pretty_exceptions_enable=False
 )
 MANUAL_OVERRIDE = typer.Option(
-    default=False,
+    None,
+    "--override",
     envvar="GIT_LLM_ON",
     hidden=True,
 )
@@ -288,20 +294,59 @@ def _show_config(show: bool):
         raise typer.Exit()
 
 
-@app.command(help="Installs the commit message hook (WIP)", hidden=True)
-def install_hook(
+@app.command(help="Installs the commit alias to trigger message hook", hidden=True)
+def install_alias(
     scope: Scope = Scope.LOCAL,
     confirm: bool = CONFIRM,
+    debug: bool = DEBUG,
+    command: str = typer.Option(help="The name of the command alias", default="llmc"),
 ):
-    program_name = sys.argv[0]
+    if _confirm(f"Do you want to install the git comamnd alias: {command}"):
+        _set_config(
+            f"alias.{command}",
+            scope=scope,
+            value=ALIAS,
+            abort_on_error=debug,
+        )
+
+
+@app.command(help="Installs the commit message hook", hidden=True)
+def install_hook(
+    confirm: bool = CONFIRM,
+    debug: bool = DEBUG,
+    overwrite: bool = typer.Option(
+        None,
+        "--overwrite",
+        help="Overwrite the commit message hook if it already exists",
+    ),
+):
+    program_name = sys.argv[
+        0
+    ]  # TODO we need the actual command if not running from the installed version
+    repository = execute_command(["git", "rev-parse", "--show-toplevel"])
+    if not repository or not program_name:
+        typer.Exit(-3)
+
+    repository = repository.strip()  # type: ignore
     _confirm(
-        f"Are you sure you want to install the commit hook using {program_name}?",
+        f"Are you sure you want to install the commit hook in the {repository} repository, using {program_name}?",
         confirm=confirm,
     )
     ## REVIEW we can embedd the file with the dist or generate it in runtime
     ## the make file could also have a target to install the commit hook
-    print(read_file(file_path=Path("prepare-commit-msg.sample")))
-    typer.Abort()
+    hook = read_file(file_path=Path("prepare-commit-msg.sample"), debug=True)
+    if hook:
+        hook = hook.replace(
+            'GIT_LLM_UTILS_PATH="path/to/git-llm-utils"',
+            f'GIT_LLM_UTILS_PATH="{program_name}"',
+        )
+        path = f"{repository}/.git/hooks/prepare-commit-msg"
+        if write_file(Path(path), hook, debug=True, overwrite=overwrite):
+            execute_command(["chmod", "+x", path])
+        else:
+            typer.Exit(-1)
+    else:
+        typer.Exit(-2)
 
 
 @app.callback()
@@ -319,3 +364,4 @@ def _(
 
 if __name__ == "__main__":
     app()
+# type: ignore
