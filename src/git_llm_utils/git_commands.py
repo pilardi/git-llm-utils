@@ -16,17 +16,24 @@ def get_config(
     default_value: str | None = None,
     scope: Scope = Scope.LOCAL,
     abort_on_error: bool = False,
+    namespace: str = "git-llm-utils",
+    valid_codes=_VALID_EXIT_CODES,
 ) -> Optional[str]:
     output = execute_command(
-        ["git", "config", "--get", f"--{scope.value}", f"git-llm-utils.{key}"],
+        ["git", "config", "--get", f"--{scope.value}", f"{namespace}.{key}"],
         abort_on_error=abort_on_error,
-        valid_codes=_VALID_EXIT_CODES,
+        valid_codes=valid_codes,
     )
     return output and str.strip(output) or default_value
 
 
 def set_config(
-    key: str, value: str, scope: Scope = Scope.LOCAL, abort_on_error: bool = True
+    key: str,
+    value: str,
+    scope: Scope = Scope.LOCAL,
+    abort_on_error: bool = True,
+    namespace: str = "git-llm-utils",
+    valid_codes=_VALID_EXIT_CODES,
 ):
     execute_command(
         [
@@ -34,11 +41,11 @@ def set_config(
             "config",
             f"--{scope.value}",
             "--replace-all",
-            f"git-llm-utils.{key}",
+            f"{namespace}.{key}",
             f"{value}",
         ],
         abort_on_error=abort_on_error,
-        valid_codes=_VALID_EXIT_CODES,
+        valid_codes=valid_codes,
     )
 
 

@@ -82,6 +82,18 @@ class Setting(Enum):
         "ollama/qwen3-coder:480b-cloud",
         help="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
     )
+    MAX_INPUT_TOKENS = __setting__(
+        "max_input_tokens",
+        help="How many tokens to send at most to the model",
+        factory=262144,
+        parser=int,
+    )
+    MAX_OUTPUT_TOKENS = __setting__(
+        "max_output_tokens",
+        help="How many tokens to get at most from the model",
+        factory=32768,
+        parser=int,
+    )
     API_KEY = __setting__(
         "api_key",
         help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
@@ -151,6 +163,8 @@ def description(
 def status(
     with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
     model: str = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
@@ -161,6 +175,8 @@ def status(
         with_emojis=with_emojis,
         with_comments=False,
         model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
         api_key=api_key,
         api_url=api_url,
         description_file=description_file,
@@ -178,6 +194,8 @@ def generate(
     with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool = Setting.COMMENTS.option,  # type: ignore
     model: str = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
@@ -196,8 +214,10 @@ def generate(
         commented = False
         file_path = description_file and Path(folder, description_file) or None
         client = LLMClient(
-            model_name=model,
             use_emojis=with_emojis,
+            model_name=model,
+            max_tokens=max_input_tokens,
+            max_output_tokens=max_output_tokens,
             api_key=api_key,
             api_url=api_url,
             use_tools=tools and file_path is not None and file_path.exists(),
@@ -301,13 +321,12 @@ def install_alias(
     debug: bool = DEBUG,
     command: str = typer.Option(help="The name of the command alias", default="llmc"),
 ):
-    if _confirm(f"Do you want to install the git comamnd alias: {command}"):
-        _set_config(
-            f"alias.{command}",
-            scope=scope,
-            value=ALIAS,
-            abort_on_error=debug,
-        )
+    _confirm(
+        f"Do you want to install the git comamnd alias: {command}", confirm=confirm
+    )
+    _set_config(
+        f"{command}", namespace="alias", scope=scope, value=ALIAS, abort_on_error=debug
+    )
 
 
 @app.command(help="Installs the commit message hook", hidden=True)
@@ -355,7 +374,10 @@ def _(
         None, "--version", callback=_show_version, help="shows the current version"
     ),
     config: bool | None = typer.Option(
-        None, "--config", callback=_show_config, help="shows the configuration options"
+        None,
+        "--config",
+        callback=_show_config,
+        help="shows the all configuration options",
     ),
     debug: bool = DEBUG,
 ):

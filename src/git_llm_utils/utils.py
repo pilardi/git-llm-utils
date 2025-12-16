@@ -51,6 +51,7 @@ def execute_command(
     verbose: bool = DEBUG,
     valid_codes: Iterable[int] = [0],
 ) -> str | None:
+    report_error(f"Will run command: {command}", debug=verbose)
     try:
         process = subprocess.run(
             command,

@@ -32,7 +32,13 @@ def _mock(monkeypatch, changes: str | Any = None, message: str | Any = None):
 def test_generate_manual_does_nothing(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    generate(manual=True, manual_override=False, output=res)
+    generate(
+        manual=True,
+        manual_override=False,
+        output=res,
+        max_input_tokens=1000,
+        max_output_tokens=1000,
+    )
     res.seek(0)
     assert res.read() == ""
 
@@ -40,7 +46,13 @@ def test_generate_manual_does_nothing(monkeypatch):
 def test_generate_with_no_change(monkeypatch):
     _mock(monkeypatch)
     res = StringIO()
-    generate(manual=False, manual_override=True, output=res)
+    generate(
+        manual=False,
+        manual_override=True,
+        output=res,
+        max_input_tokens=1000,
+        max_output_tokens=1000,
+    )
     res.seek(0)
     assert res.read() == "No changes\n"
 
@@ -55,6 +67,8 @@ def test_generate_with_comments(monkeypatch):
         description_file=None,
         with_emojis=False,
         model="test",
+        max_input_tokens=1000,
+        max_output_tokens=1000,
         api_key="test",
         api_url="test",
         output=res,
@@ -73,6 +87,8 @@ def test_generate_without_comments(monkeypatch):
         description_file=None,
         with_emojis=False,
         model="test",
+        max_input_tokens=1000,
+        max_output_tokens=1000,
         api_key="test",
         api_url="test",
         output=res,
