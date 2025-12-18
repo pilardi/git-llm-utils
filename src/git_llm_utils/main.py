@@ -1,4 +1,5 @@
 from enum import Enum
+import os
 from git_llm_utils.utils import (
     _bool,
     get_tomlib_project,
@@ -329,7 +330,10 @@ def install_alias(
     )
 
 
-@app.command(help="Installs the commit message hook", hidden=True)
+@app.command(
+    help="Installs the commit message hook, only works with the venv source code or the binary distribution",
+    hidden=True,
+)
 def install_hook(
     confirm: bool = CONFIRM,
     debug: bool = DEBUG,
@@ -339,20 +343,42 @@ def install_hook(
         help="Overwrite the commit message hook if it already exists",
     ),
 ):
-    program_name = sys.argv[
-        0
-    ]  # TODO we need the actual command if not running from the installed version
-    repository = execute_command(["git", "rev-parse", "--show-toplevel"])
-    if not repository or not program_name:
+    is_venv = sys.prefix != sys.base_prefix
+    if is_venv:
+        directory = Path(os.environ.get("VIRTUAL_ENV", sys.argv[0])).parent
+        program_name = f"uv --directory {directory} run git-llm-utils"
+    else:
+        program_name = sys.executable
+
+    cmd = program_name.split()
+    cmd.append("--version")
+    version = execute_command(cmd)
+    if not version or read_version() not in version:
+        print(
+            "git-llm-utils version not detected, please run this command with the git-llm-utils client",
+            file=sys.stderr,
+        )
+        typer.Exit(-2)
+
+    if not program_name:
+        print(
+            "git-llm-utils not detected, please run this command with the git-llm-utils client",
+            file=sys.stderr,
+        )
         typer.Exit(-3)
+
+    repository = execute_command(["git", "rev-parse", "--show-toplevel"])
+    if not repository:
+        print("No git repository detected in the current folder", file=sys.stderr)
+        typer.Exit(-4)
 
     repository = repository.strip()  # type: ignore
     _confirm(
-        f"Are you sure you want to install the commit hook in the {repository} repository, using {program_name}?",
+        f"Are you sure you want to install the commit hook in the '{repository}' repository, using '{program_name}' command?",
         confirm=confirm,
     )
     ## REVIEW we can embedd the file with the dist or generate it in runtime
-    ## the make file could also have a target to install the commit hook
+    ## https://pyinstaller.org/en/v4.1/runtime-information.html#using-file
     hook = read_file(file_path=Path("prepare-commit-msg.sample"), debug=True)
     if hook:
         hook = hook.replace(
@@ -363,9 +389,9 @@ def install_hook(
         if write_file(Path(path), hook, debug=True, overwrite=overwrite):
             execute_command(["chmod", "+x", path])
         else:
-            typer.Exit(-1)
+            typer.Exit(-5)
     else:
-        typer.Exit(-2)
+        typer.Exit(-6)
 
 
 @app.callback()
@@ -385,5 +411,11 @@ def _(
 
 
 if __name__ == "__main__":
-    app()
-# type: ignore
+    if getattr(sys, "frozen", False):
+        app()
+    else:
+        print(
+            "Please run the app using the git-llm-utils command",
+            file=sys.stderr,
+        )
+        sys.exit(-1)

@@ -251,6 +251,12 @@ def test_generate_with_comments(cmd, repository, mock_server):
 
 
 @pytest.mark.integration
+def test_alias(cmd, repository, mock_server):
+    ### TODO run install-alias command and verify the repository config settings
+    pass
+
+
+@pytest.mark.integration
 def test_hook(cmd, repository, mock_server):
     hook = "prepare-commit-msg"
     content = _read_file(f"{hook}.sample")
@@ -265,8 +271,7 @@ def test_hook(cmd, repository, mock_server):
         cmd + ["set-config", "manual", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
-    ### TODO add hook with git, add a change to the repo and commit it verity it doesn't fail
-    ### add the alias to the repo and commit with llmc
+    ### TODO run the install-hook command
 
 
 if __name__ == "__main__":
