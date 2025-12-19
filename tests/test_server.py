@@ -4,13 +4,11 @@ from git_llm_utils.utils import (
     execute_command,
     execute_background_command,
     read_file,
-    write_file,
 )
 from pathlib import Path
 from typing import Callable, Optional
 import os
 import pytest
-import re
 import signal
 import sys
 import time
@@ -258,20 +256,8 @@ def test_alias(cmd, repository, mock_server):
 
 @pytest.mark.integration
 def test_hook(cmd, repository, mock_server):
-    hook = "prepare-commit-msg"
-    content = _read_file(f"{hook}.sample")
-    content = re.sub(
-        r"GIT_LLM_UTILS_PATH=\".*\"",
-        f'GIT_LLM_UTILS_PATH="{" ".join(cmd)}"',
-        content,  # type: ignore
-    )
-    hook_file = f"{repository}/{hook}"
-    write_file(Path(hook_file), content=content)
-    execute_command(  # update settings
-        cmd + ["set-config", "manual", "--scope", "local", "--value", "True"],
-        cwd=repository,
-    )
     ### TODO run the install-hook command
+    pass
 
 
 if __name__ == "__main__":

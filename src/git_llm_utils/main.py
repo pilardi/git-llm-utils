@@ -1,5 +1,4 @@
 from enum import Enum
-import os
 from git_llm_utils.utils import (
     _bool,
     get_tomlib_project,
@@ -12,11 +11,13 @@ from git_llm_utils.utils import (
 from git_llm_utils.git_commands import (
     get_config as _get_config,
     get_staged_changes,
+    get_repository_path,
     set_config as _set_config,
     unset_config,
     Scope,
 )
 from git_llm_utils.llm_cli import LLMClient
+from os import environ
 from pathlib import Path
 from rich.console import Console
 from rich.table import Table
@@ -28,32 +29,59 @@ import typer
 
 OVERRIDE = "GIT_LLM_ON"
 ALIAS = f"!{OVERRIDE}=True git commit"
+MESSAGE_HOOK = "prepare-commit-msg"
+MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.sample"
 
 
-class Setting(Enum):
+class Runtime:
+    repository: Optional[Path] = None
+    debug: bool = False
+    confirm: bool = True
+
     @staticmethod
-    def __setting__(
+    def _set_repository(repository: str):
+        Runtime.repository = get_repository_path(repository=repository)
+        return Runtime.repository
+
+    @staticmethod
+    def _set_debug():
+        setattr(app, "pretty_exceptions_enable", True)
+        Runtime.debug = True
+        return True
+
+    @staticmethod
+    def _set_confirm(confirm: bool):
+        Runtime.confirm = confirm
+        return True
+
+    @staticmethod
+    def _get_setting(
         name: str,
         factory: Any | None = None,
         parser: Callable[[str], Any] | Any = None,
         help: str | None = None,
+        expose_value: bool = True,
     ):
-        default = _get_config(name, factory)
+        default = _get_config(
+            name, default_value=factory, repository=Runtime.repository
+        )
         if parser == _bool:
             help = f"{help} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{name}]"
-        option = typer.Option(  # type: ignore
-            default=default,
-            help=help,
-            parser=parser,
-            show_default=parser != _bool,
-        )
 
         return (
             name,
             str(factory),
-            option,
+            typer.Option(  # type: ignore
+                default=default,
+                help=help,
+                parser=parser,
+                expose_value=expose_value,
+                show_default=parser != _bool,
+            ),
         )
 
+
+class Setting(Enum):
     def __new__(
         cls,
         name: str,
@@ -66,55 +94,56 @@ class Setting(Enum):
         enum.option = option  # type: ignore
         return enum
 
-    EMOJIS = __setting__(
+    EMOJIS = Runtime._get_setting(
         "emojis",
         factory=True,
         parser=_bool,
         help="If true will instruct the LLMs to add applicable emojis (see --config)",
     )
-    COMMENTS = __setting__(
+    COMMENTS = Runtime._get_setting(
         "comments",
         factory=True,
         parser=_bool,
         help="If true will generate the commit message commented out so that saving it will exclude it from the commit message (see --config)",
     )
-    MODEL = __setting__(
+    MODEL = Runtime._get_setting(
         "model",
         "ollama/qwen3-coder:480b-cloud",
         help="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
     )
-    MAX_INPUT_TOKENS = __setting__(
+    MAX_INPUT_TOKENS = Runtime._get_setting(
         "max_input_tokens",
         help="How many tokens to send at most to the model",
         factory=262144,
         parser=int,
     )
-    MAX_OUTPUT_TOKENS = __setting__(
+    MAX_OUTPUT_TOKENS = Runtime._get_setting(
         "max_output_tokens",
         help="How many tokens to get at most from the model",
         factory=32768,
         parser=int,
     )
-    API_KEY = __setting__(
+    API_KEY = Runtime._get_setting(
         "api_key",
+        expose_value=False,
         help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
     )
-    API_URL = __setting__(
+    API_URL = Runtime._get_setting(
         "api_url",
         help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
     )
-    DESCRIPTION_FILE = __setting__(
+    DESCRIPTION_FILE = Runtime._get_setting(
         "description-file",
         "README.md",
         help="Description file of the purpose of the respository, usually a README.md file",
     )
-    TOOLS = __setting__(
+    TOOLS = Runtime._get_setting(
         "tools",
         factory=False,
         parser=_bool,
         help="Whether to allow tools usage or not while requesting llm responses",
     )
-    MANUAL = __setting__(
+    MANUAL = Runtime._get_setting(
         "manual",
         factory=True,
         parser=_bool,
@@ -128,36 +157,18 @@ If you want to generate a commit message for every commit, set `set-config manua
 app = typer.Typer(
     help=get_tomlib_project().get("description", None), pretty_exceptions_enable=False
 )
-MANUAL_OVERRIDE = typer.Option(
-    None,
-    "--override",
-    envvar="GIT_LLM_ON",
-    hidden=True,
-)
-CONFIRM = typer.Option(
-    None,
-    "--confirm",
-    help="Requests confirmation before changing a setting",
-)
-OUTPUT = typer.Option(hidden=True, parser=lambda s: sys.stdout, default=sys.stdout)
-DEBUG = typer.Option(
-    None,
-    "--debug",
-    help="enables debug information when it runs into a runtime failure",
-    callback=lambda d: setattr(app, "pretty_exceptions_enable", d),
-    envvar=GIT_LLM_UTILS_DEBUG,
-    parser=_bool,
-    hidden=True,
-)
 
 
-@app.command(help="Reads respository description")
+@app.command(help="Reads the respository description")
 def description(
-    folder: str = ".",
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    debug: bool = DEBUG,
 ) -> Optional[str]:
-    print(read_file(file_path=Path(folder, description_file)))
+    print(
+        read_file(
+            file_path=Path(Runtime.repository or ".", description_file),
+            debug=Runtime.debug,
+        )
+    )
 
 
 @app.command(help="Generates a status message based on the git staged changes")
@@ -170,7 +181,6 @@ def status(
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
     tools: bool = Setting.TOOLS.option,  # type: ignore
-    debug: bool = DEBUG,
 ):
     generate(
         with_emojis=with_emojis,
@@ -184,12 +194,11 @@ def status(
         tools=tools,
         manual=False,
         output=sys.stdout,
-        debug=debug,
     )
 
 
 @app.command(
-    help="Generates a commit message based on the git staged changes for the prepare-commit-msg hook"
+    help=f"Generates a commit message based on the git staged changes for the {MESSAGE_HOOK} hook"
 )
 def generate(
     with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
@@ -202,18 +211,27 @@ def generate(
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
     tools: bool = Setting.TOOLS.option,  # type: ignore
     manual: bool = Setting.MANUAL.option,  # type: ignore
-    manual_override: bool = MANUAL_OVERRIDE,
-    output: TextIO = OUTPUT,
-    debug: bool = DEBUG,
+    manual_override: bool = typer.Option(
+        None,
+        "--override",
+        envvar="GIT_LLM_ON",
+        hidden=True,
+    ),
+    output: TextIO = typer.Option(
+        hidden=True, parser=lambda _: sys.stdout, default=sys.stdout
+    ),
 ):
     if manual and not manual_override:
         return
 
-    folder = "."
-    changes = get_staged_changes(folder=folder)
+    changes = get_staged_changes(repository=Runtime.repository)
     if changes:
         commented = False
-        file_path = description_file and Path(folder, description_file) or None
+        file_path = (
+            description_file
+            and Path(Runtime.repository or ".", description_file)
+            or None
+        )
         client = LLMClient(
             use_emojis=with_emojis,
             model_name=model,
@@ -244,17 +262,20 @@ def generate(
 def get_config(
     setting: Setting,
     scope: Scope = Scope.LOCAL,
-    debug: bool = DEBUG,
 ):
-    config = _get_config(setting.value, scope=scope)
+    config = _get_config(
+        setting.value,
+        repository=Runtime.repository,
+        scope=scope,
+    )
     if config:
         print(config)
     else:
         print(f"{setting.option.default} [default-value]")  # type: ignore
 
 
-def _confirm(message: str, confirm: bool = CONFIRM):
-    if confirm:
+def _confirm(message: str):
+    if Runtime.confirm:
         confirmed = typer.confirm(message)
         if not confirmed:
             raise typer.Abort()
@@ -267,26 +288,24 @@ def set_config(
     setting: Setting,
     value: str | None = None,
     scope: Scope = Scope.LOCAL,
-    confirm: bool = CONFIRM,
-    debug: bool = DEBUG,
 ):
-    config = _get_config(setting.value)
+    config = _get_config(setting.value, repository=Runtime.repository)
     if value:
         if setting.option.parser:  # type: ignore
             value = setting.option.parser(value)  # type: ignore
         _confirm(
             f"Are you sure you want to update the setting: {setting.value} from {config} to {value}?",
-            confirm=confirm,
         )
-        _set_config(setting.value, value, scope=scope)  # type: ignore
-        print(f"Updated {setting.value} to {_get_config(setting.value)}")
+        _set_config(setting.value, value, scope=scope, repository=Runtime.repository)  # type: ignore
+        print(
+            f"Updated {setting.value} to {_get_config(setting.value, repository=Runtime.repository)}"
+        )
     else:
         if config:
             _confirm(
                 f"Are you sure you want to remove the {setting.value} setting value: {config}?",
-                confirm=confirm,
             )
-            unset_config(setting.value, scope=scope)
+            unset_config(setting.value, scope=scope, repository=Runtime.repository)
             print(f"Restored {setting.value} to {setting.factory} [default-value]")  # type: ignore
         else:
             print(
@@ -318,25 +337,23 @@ def _show_config(show: bool):
 @app.command(help="Installs the commit alias to trigger message hook", hidden=True)
 def install_alias(
     scope: Scope = Scope.LOCAL,
-    confirm: bool = CONFIRM,
-    debug: bool = DEBUG,
     command: str = typer.Option(help="The name of the command alias", default="llmc"),
 ):
-    _confirm(
-        f"Do you want to install the git comamnd alias: {command}", confirm=confirm
-    )
+    _confirm(f"Do you want to install the git comamnd alias: {command}")
     _set_config(
-        f"{command}", namespace="alias", scope=scope, value=ALIAS, abort_on_error=debug
+        f"{command}",
+        namespace="alias",
+        scope=scope,
+        value=ALIAS,
+        repository=Runtime.repository,
+        abort_on_error=Runtime.debug,
     )
 
 
 @app.command(
     help="Installs the commit message hook, only works with the venv source code or the binary distribution",
-    hidden=True,
 )
 def install_hook(
-    confirm: bool = CONFIRM,
-    debug: bool = DEBUG,
     overwrite: bool = typer.Option(
         None,
         "--overwrite",
@@ -345,7 +362,7 @@ def install_hook(
 ):
     is_venv = sys.prefix != sys.base_prefix
     if is_venv:
-        directory = Path(os.environ.get("VIRTUAL_ENV", sys.argv[0])).parent
+        directory = Path(environ.get("VIRTUAL_ENV", sys.argv[0])).parent
         program_name = f"uv --directory {directory} run git-llm-utils"
     else:
         program_name = sys.executable
@@ -367,30 +384,39 @@ def install_hook(
         )
         typer.Exit(-3)
 
-    repository = execute_command(["git", "rev-parse", "--show-toplevel"])
-    if not repository:
-        print("No git repository detected in the current folder", file=sys.stderr)
-        typer.Exit(-4)
+    if not Runtime.repository:
+        if not Runtime._set_repository("."):
+            print("No git repository detected in the current folder", file=sys.stderr)
+            typer.Exit(-4)
 
-    repository = repository.strip()  # type: ignore
+    hook_template_path = (Path.cwd() / __file__).with_name(MESSAGE_HOOK_TEMPLATE)
     _confirm(
-        f"Are you sure you want to install the commit hook in the '{repository}' repository, using '{program_name}' command?",
-        confirm=confirm,
+        f"Are you sure you want to install the commit message hook in the '{Runtime.repository}' repository, using '{program_name}' command? ({hook_template_path})",
     )
-    ## REVIEW we can embedd the file with the dist or generate it in runtime
-    ## https://pyinstaller.org/en/v4.1/runtime-information.html#using-file
-    hook = read_file(file_path=Path("prepare-commit-msg.sample"), debug=True)
+
+    hook = read_file(
+        hook_template_path,
+        debug=Runtime.debug,
+    )
     if hook:
         hook = hook.replace(
-            'GIT_LLM_UTILS_PATH="path/to/git-llm-utils"',
-            f'GIT_LLM_UTILS_PATH="{program_name}"',
+            "path/to/git-llm-utils",
+            program_name,
         )
-        path = f"{repository}/.git/hooks/prepare-commit-msg"
-        if write_file(Path(path), hook, debug=True, overwrite=overwrite):
-            execute_command(["chmod", "+x", path])
+        hook_path = f"{Runtime.repository}/.git/hooks/{MESSAGE_HOOK}"
+        if write_file(Path(hook_path), hook, overwrite=overwrite):
+            execute_command(["chmod", "+x", hook_path])
         else:
+            print(
+                f"Failed to write {MESSAGE_HOOK} to {hook_path}, use --overwrite if the hook is already installed",
+                file=sys.stderr,
+            )
             typer.Exit(-5)
     else:
+        print(
+            f"Failed to read {MESSAGE_HOOK_TEMPLATE} from {hook_template_path}",
+            file=sys.stderr,
+        )
         typer.Exit(-6)
 
 
@@ -405,7 +431,26 @@ def _(
         callback=_show_config,
         help="shows the all configuration options",
     ),
-    debug: bool = DEBUG,
+    repository: Path = typer.Option(
+        help="Git Repository path, if not given will assume the current path is the repository",
+        parser=Runtime._set_repository,
+        default=None,
+        allow_from_autoenv=True,
+        envvar="GIT_LLM_UTILS_REPO",
+    ),
+    confirm: bool = typer.Option(
+        callback=Runtime._set_confirm,
+        help="Requests confirmation before changing a setting",
+        default=Runtime.confirm,
+    ),
+    debug: bool = typer.Option(
+        None,
+        "--debug",
+        help="enables debug information when it runs into a runtime failure",
+        callback=Runtime._set_debug,
+        envvar=GIT_LLM_UTILS_DEBUG,
+        hidden=True,
+    ),
 ):
     pass
 

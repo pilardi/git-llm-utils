@@ -7,9 +7,11 @@ a = Analysis(
     ['src/git_llm_utils/main.py'],
     pathex=[],
     binaries=[],
-    datas=[ # see https://github.com/openai/tiktoken/issues/80#issuecomment-1484965176
+    datas=[
+        # see https://github.com/openai/tiktoken/issues/80#issuecomment-1484965176
         (f'{litellm_dir}/litellm_core_utils/tokenizers/anthropic_tokenizer.json', 'litellm/litellm_core_utils/tokenizers'),
-        (f'prepare-commit-msg.sample', 'git-llm-utils/prepare-commit-msg.sample'),
+        # https://pyinstaller.org/en/v4.1/runtime-information.html#using-file
+        (f'src/git_llm_utils/prepare-commit-msg.sample', '.'),
     ],
     hiddenimports=[
         'tiktoken_ext',

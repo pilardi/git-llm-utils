@@ -47,7 +47,7 @@ def execute_background_command(
 def execute_command(
     command: list[str],
     abort_on_error: bool = True,
-    cwd: str | None = None,
+    cwd: Optional[str | Path] = None,
     verbose: bool = DEBUG,
     valid_codes: Iterable[int] = [0],
 ) -> str | None:
