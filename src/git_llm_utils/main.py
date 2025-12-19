@@ -6,7 +6,7 @@ from git_llm_utils.utils import (
     read_file,
     write_file,
     execute_command,
-    GIT_LLM_UTILS_DEBUG,
+    ErrorHandler,
 )
 from git_llm_utils.git_commands import (
     get_config as _get_config,
@@ -28,15 +28,17 @@ import sys
 import typer
 
 OVERRIDE = "GIT_LLM_ON"
-ALIAS = f"!{OVERRIDE}=True git commit"
+COMMIT_ALIAS = "llmc"
+COMMIT_ALIAS_GIT_COMMAND = f"!{OVERRIDE}=True git commit"
 MESSAGE_HOOK = "prepare-commit-msg"
 MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.sample"
+NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git commit -a")'
 
 
 class Runtime:
     repository: Optional[Path] = None
-    debug: bool = False
     confirm: bool = True
+    api_key: Optional[str] = None
 
     @staticmethod
     def _set_repository(repository: str):
@@ -44,15 +46,20 @@ class Runtime:
         return Runtime.repository
 
     @staticmethod
-    def _set_debug():
-        setattr(app, "pretty_exceptions_enable", True)
-        Runtime.debug = True
-        return True
+    def _set_debug(debug: bool = False):
+        ErrorHandler.debug = debug
+        setattr(app, "pretty_exceptions_enable", ErrorHandler.debug)
+        return ErrorHandler.debug
 
     @staticmethod
-    def _set_confirm(confirm: bool):
+    def _set_confirm(confirm: bool = False):
         Runtime.confirm = confirm
-        return True
+        return Runtime.confirm
+
+    @staticmethod
+    def _set_api_key(api_key: str):
+        Runtime.api_key = api_key
+        return api_key
 
     @staticmethod
     def _get_setting(
@@ -61,6 +68,8 @@ class Runtime:
         parser: Callable[[str], Any] | Any = None,
         help: str | None = None,
         expose_value: bool = True,
+        envvar: Optional[str] = None,
+        callback: Optional[Callable[..., Any]] = None,
     ):
         default = _get_config(
             name, default_value=factory, repository=Runtime.repository
@@ -75,8 +84,10 @@ class Runtime:
                 default=default,
                 help=help,
                 parser=parser,
+                envvar=envvar,
                 expose_value=expose_value,
                 show_default=parser != _bool,
+                callback=callback,
             ),
         )
 
@@ -126,6 +137,8 @@ class Setting(Enum):
     API_KEY = Runtime._get_setting(
         "api_key",
         expose_value=False,
+        envvar="GIT_LLM_API_KEY",
+        callback=Runtime._set_api_key,
         help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
     )
     API_URL = Runtime._get_setting(
@@ -148,7 +161,7 @@ class Setting(Enum):
         factory=True,
         parser=_bool,
         help=f"""If true will only generate the commit status message when called with the {OVERRIDE} environment variable set on True.
-You can set an alias such as `git config --global alias.llmc '{ALIAS}'`
+You can set an alias such as `git config --global alias.llmc '{COMMIT_ALIAS_GIT_COMMAND}'`
 If you want to generate a commit message for every commit, set `set-config manual --value False` (see --config)
         """,
     )
@@ -163,12 +176,7 @@ app = typer.Typer(
 def description(
     description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
 ) -> Optional[str]:
-    print(
-        read_file(
-            file_path=Path(Runtime.repository or ".", description_file),
-            debug=Runtime.debug,
-        )
-    )
+    print(read_file(file_path=Path(Runtime.repository or ".", description_file)))
 
 
 @app.command(help="Generates a status message based on the git staged changes")
@@ -237,7 +245,7 @@ def generate(
             model_name=model,
             max_tokens=max_input_tokens,
             max_output_tokens=max_output_tokens,
-            api_key=api_key,
+            api_key=api_key or Runtime.api_key,
             api_url=api_url,
             use_tools=tools and file_path is not None and file_path.exists(),
             respository_description=lambda: read_file(file_path),  # type: ignore
@@ -255,7 +263,7 @@ def generate(
                 print(message, end="", file=output)
         print(file=output)
     else:
-        print("No changes", file=output)
+        print(NO_CHANGES_MESSAGE, file=output)
 
 
 @app.command(help="Reads the configuration value")
@@ -334,32 +342,41 @@ def _show_config(show: bool):
         raise typer.Exit()
 
 
-@app.command(help="Installs the commit alias to trigger message hook", hidden=True)
+COMMIT_ALIAS_COMMAND = typer.Option(
+    help="The name of the commit alias", default=COMMIT_ALIAS
+)
+STATUS_ALIAS_COMMAND = typer.Option(
+    help="The name of the status alias", default=COMMIT_ALIAS
+)
+OVERWRITE = typer.Option(
+    None,
+    "--overwrite",
+    help="Overwrite the commit message hook if it already exists",
+)
+
+
+@app.command(
+    help=f"Installs the commit alias to trigger message hook, as in `git {COMMIT_ALIAS}`"
+)
 def install_alias(
     scope: Scope = Scope.LOCAL,
-    command: str = typer.Option(help="The name of the command alias", default="llmc"),
+    command: str = COMMIT_ALIAS_COMMAND,
 ):
-    _confirm(f"Do you want to install the git comamnd alias: {command}")
+    _confirm(f"Do you want to install the git comamnd alias: `git {command}`")
     _set_config(
         f"{command}",
         namespace="alias",
         scope=scope,
-        value=ALIAS,
+        value=COMMIT_ALIAS_GIT_COMMAND,
         repository=Runtime.repository,
-        abort_on_error=Runtime.debug,
+        abort_on_error=ErrorHandler.debug,
     )
 
 
 @app.command(
     help="Installs the commit message hook, only works with the venv source code or the binary distribution",
 )
-def install_hook(
-    overwrite: bool = typer.Option(
-        None,
-        "--overwrite",
-        help="Overwrite the commit message hook if it already exists",
-    ),
-):
+def install_hook(overwrite: bool = OVERWRITE):
     is_venv = sys.prefix != sys.base_prefix
     if is_venv:
         directory = Path(environ.get("VIRTUAL_ENV", sys.argv[0])).parent
@@ -375,29 +392,26 @@ def install_hook(
             "git-llm-utils version not detected, please run this command with the git-llm-utils client",
             file=sys.stderr,
         )
-        typer.Exit(-2)
+        raise typer.Exit(-2)
 
     if not program_name:
         print(
             "git-llm-utils not detected, please run this command with the git-llm-utils client",
             file=sys.stderr,
         )
-        typer.Exit(-3)
+        raise typer.Exit(-3)
 
     if not Runtime.repository:
         if not Runtime._set_repository("."):
             print("No git repository detected in the current folder", file=sys.stderr)
-            typer.Exit(-4)
+            raise typer.Exit(-4)
 
     hook_template_path = (Path.cwd() / __file__).with_name(MESSAGE_HOOK_TEMPLATE)
     _confirm(
-        f"Are you sure you want to install the commit message hook in the '{Runtime.repository}' repository, using '{program_name}' command? ({hook_template_path})",
+        f"Are you sure you want to install the commit message hook in the '{Runtime.repository}' repository, using '{program_name}' command?",
     )
 
-    hook = read_file(
-        hook_template_path,
-        debug=Runtime.debug,
-    )
+    hook = read_file(hook_template_path)
     if hook:
         hook = hook.replace(
             "path/to/git-llm-utils",
@@ -411,13 +425,26 @@ def install_hook(
                 f"Failed to write {MESSAGE_HOOK} to {hook_path}, use --overwrite if the hook is already installed",
                 file=sys.stderr,
             )
-            typer.Exit(-5)
+            raise typer.Exit(-5)
     else:
         print(
             f"Failed to read {MESSAGE_HOOK_TEMPLATE} from {hook_template_path}",
             file=sys.stderr,
         )
-        typer.Exit(-6)
+        raise typer.Exit(-6)
+
+
+@app.command(
+    help=f"Installs the commit message hook and alias in the current repository, as in `git {COMMIT_ALIAS}`",
+)
+def install(
+    command: str = COMMIT_ALIAS_COMMAND,
+    overwrite: bool = OVERWRITE,
+):
+    install_hook(overwrite=overwrite)
+    install_alias(
+        scope=Scope.LOCAL, command=command
+    )  # the hook is only local to the repo
 
 
 @app.callback()
@@ -436,19 +463,22 @@ def _(
         parser=Runtime._set_repository,
         default=None,
         allow_from_autoenv=True,
-        envvar="GIT_LLM_UTILS_REPO",
+        envvar="GIT_LLM_REPO",
     ),
     confirm: bool = typer.Option(
-        callback=Runtime._set_confirm,
         help="Requests confirmation before changing a setting",
+        callback=Runtime._set_confirm,
         default=Runtime.confirm,
+        parser=_bool,
+        envvar="GIT_LLM_CONFIRM",
     ),
     debug: bool = typer.Option(
         None,
         "--debug",
         help="enables debug information when it runs into a runtime failure",
         callback=Runtime._set_debug,
-        envvar=GIT_LLM_UTILS_DEBUG,
+        parser=_bool,
+        envvar=ErrorHandler.GIT_LLM_DEBUG,
         hidden=True,
     ),
 ):
@@ -457,7 +487,10 @@ def _(
 
 if __name__ == "__main__":
     if getattr(sys, "frozen", False):
-        app()
+        try:
+            app()
+        except KeyboardInterrupt:
+            typer.Abort()
     else:
         print(
             "Please run the app using the git-llm-utils command",

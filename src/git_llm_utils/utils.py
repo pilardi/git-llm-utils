@@ -8,24 +8,28 @@ import sys
 import tomllib
 
 
-def _bool(value: str) -> bool:
+def _bool(value: Optional[str]) -> bool:
     return value and value.lower() in ("1", "true", "yes") or False
 
 
-GIT_LLM_UTILS_DEBUG = "GIT_LLM_UTILS_DEBUG"
-DEBUG = _bool(os.environ.get(GIT_LLM_UTILS_DEBUG, ""))
+class ErrorHandler:
+    GIT_LLM_DEBUG = "GIT_LLM_DEBUG"
+    debug = _bool(os.environ.get(GIT_LLM_DEBUG))
 
+    @staticmethod
+    def _report(message: str, file=sys.stdout, *args, **kwargs):
+        if ErrorHandler.debug:
+            print(message, file=file, *args, **kwargs)
 
-def report_error(message: str, debug: bool = DEBUG, *args, **kwargs):
-    if debug:
-        print(message, file=sys.stderr, *args, **kwargs)
+    @staticmethod
+    def _report_error(message: str, *args, **kwargs):
+        ErrorHandler._report(message, file=sys.stderr, *args, **kwargs)
 
 
 def execute_background_command(
     command: list[str],
     abort_on_error: bool = True,
     cwd: str | None = None,
-    verbose: bool = DEBUG,
 ) -> subprocess.Popen | None:
     try:
         return subprocess.Popen(
@@ -38,8 +42,8 @@ def execute_background_command(
     except subprocess.CalledProcessError as e:
         if abort_on_error:
             raise Exception(f"Failed to execute background command: {command}", e)
-        report_error(
-            f"Failed to execute background command: {command} -> {e}", debug=verbose
+        ErrorHandler._report_error(
+            f"Failed to execute background command: {command} -> {e}"
         )
     return None
 
@@ -48,10 +52,9 @@ def execute_command(
     command: list[str],
     abort_on_error: bool = True,
     cwd: Optional[str | Path] = None,
-    verbose: bool = DEBUG,
     valid_codes: Iterable[int] = [0],
 ) -> str | None:
-    report_error(f"Will run command: {command}", debug=verbose)
+    ErrorHandler._report(f"Will run command: {command}")
     try:
         process = subprocess.run(
             command,
@@ -68,7 +71,7 @@ def execute_command(
         if e.returncode not in valid_codes:
             if abort_on_error:
                 raise Exception(f"Failed to execute command: {command}", e)
-            report_error(f"Failed to execute command: {command} -> {e}", debug=verbose)
+            ErrorHandler._report_error(f"Failed to execute command: {command} -> {e}")
     return None
 
 
@@ -78,35 +81,33 @@ def get_tomlib_project() -> Dict:
             data = tomllib.load(f)
         return data["project"]
     except Exception as e:
-        report_error(f"failed to read pyprojectL {e}")
+        ErrorHandler._report_error(f"failed to read pyproject {e}")
         return {}
 
 
-def read_file(file_path: Path | None, debug: bool = DEBUG) -> Optional[str]:
+def read_file(file_path: Path | None) -> Optional[str]:
     if file_path is not None and file_path.exists():
         try:
             with open(file_path, "r") as file:
                 return file.read()
         except Exception as e:
-            report_error(f"Failed to read {file_path}: {e}", debug=debug)
+            ErrorHandler._report_error(f"Failed to read {file_path}: {e}")
     else:
-        report_error(f"File {file_path} does not exist", debug=debug)
+        ErrorHandler._report_error(f"File {file_path} does not exist")
     return None
 
 
-def write_file(
-    file_path: Path, content: str = "", overwrite: bool = False, debug: bool = DEBUG
-) -> bool:
+def write_file(file_path: Path, content: str = "", overwrite: bool = False) -> bool:
     if not file_path.exists() or overwrite:
         try:
             with open(file_path, "w") as file:
                 file.write(content)
                 return True
         except Exception as e:
-            report_error(f"Failed to write {file_path}: {e}", debug=debug)
+            ErrorHandler._report_error(f"Failed to write {file_path}: {e}")
     else:
-        report_error(
-            f"File {file_path} already exist, use overwrite if needed", debug=debug
+        ErrorHandler._report_error(
+            f"File {file_path} already exist, use overwrite if needed"
         )
     return False
 
@@ -115,5 +116,5 @@ def read_version() -> str:
     try:
         return git_llm_utils.__version__
     except Exception as e:
-        report_error(f"Failed to get version {e}")
+        ErrorHandler._report_error(f"Failed to get version {e}")
         return "undefined"

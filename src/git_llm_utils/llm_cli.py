@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 from typing import Any, Callable, Generator
 from litellm import completion
-from git_llm_utils.utils import report_error
+from git_llm_utils.utils import ErrorHandler
 
 import json
 
@@ -313,7 +313,7 @@ class LLMClient(BaseModel):
             try:
                 return self.respository_description()
             except Exception as e:
-                report_error(f"Failed to get repository description: {e}")
+                ErrorHandler._report_error(f"Failed to get repository description: {e}")
         return ""
 
     def _available_tools(self) -> dict:

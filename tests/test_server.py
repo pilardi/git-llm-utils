@@ -5,6 +5,7 @@ from git_llm_utils.utils import (
     execute_background_command,
     read_file,
 )
+from git_llm_utils.main import COMMIT_ALIAS, COMMIT_ALIAS_GIT_COMMAND
 from pathlib import Path
 from typing import Callable, Optional
 import os
@@ -122,7 +123,7 @@ def mock_server(request):
 
 @pytest.fixture(scope="session")
 def cmd(request):
-    return request.config.getoption("--cmd").split()
+    return request.config.getoption("--cmd").split() + ["--no-confirm"]
 
 
 @pytest.fixture(scope="session")
@@ -249,18 +250,113 @@ def test_generate_with_comments(cmd, repository, mock_server):
 
 
 @pytest.mark.integration
-def test_alias(cmd, repository, mock_server):
-    ### TODO run install-alias command and verify the repository config settings
-    pass
+def test_generate_with_comments_and_repository(cmd, repository, mock_server):
+    status = _read_file("tests/files/generate_with_comments.out")
+    args = cmd + [
+        "--repository",
+        repository,
+        "generate",
+        "--api-url",
+        mock_server,
+        "--model",
+        "openai/test",
+        "--api-key",
+        API_KEY_TOKEN,
+        "--no-manual",
+        "--with-comments",
+    ]
+    assert status == execute_command(args)
+    execute_command(  # update settings
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "comments",
+            "--scope",
+            "local",
+            "--value",
+            "True",
+        ]
+    )
+    del args[-1]
+    assert status == execute_command(args)
 
 
 @pytest.mark.integration
-def test_hook(cmd, repository, mock_server):
-    ### TODO run the install-hook command
-    pass
+def test_install_alias(cmd, repository):
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "install-alias",
+        ]
+    )
+    output = execute_command(
+        ["git", "config", "--get", f"alias.{COMMIT_ALIAS}"], cwd=repository
+    )
+    assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
+
+
+@pytest.mark.integration
+def test_install_alias_command(cmd, repository):
+    execute_command(
+        cmd + ["--repository", repository, "install-alias", "--command", "integration"]
+    )
+    output = execute_command(
+        ["git", "config", "--get", "alias.integration"], cwd=repository
+    )
+    assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
+
+
+@pytest.mark.integration
+def test_install_hook(cmd, repository):
+    def verify():
+        hook = _read_file(".git/hooks/prepare-commit-msg", base_path=repository)
+        cli = [] + cmd
+        del cli[-1]  # removes confirm setting
+        assert hook is not None
+        if cmd[0] != "uv":  # we are verifying the binary as uv env is dynamic
+            assert " ".join(cli) in hook
+
+    execute_command(cmd + ["--repository", repository, "install-hook"])
+    verify()
+
+    execute_command(cmd + ["--repository", repository, "install-hook", "--overwrite"])
+    verify()
+
+
+@pytest.mark.integration
+def test_install(cmd, repository):
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "install",
+            "--overwrite",
+            "--command",
+            "llmc-installed",
+        ]
+    )
+    hook = _read_file(".git/hooks/prepare-commit-msg", base_path=repository)
+    cli = [] + cmd
+    del cli[-1]  # removes confirm setting
+    assert hook is not None
+    if (
+        cmd[0] != "uv"
+    ):  # we are verifying the installable only as uv env location is dynamic otherwise
+        assert " ".join(cli) in hook
+
+    output = execute_command(
+        ["git", "config", "--get", "alias.llmc-installed"], cwd=repository
+    )
+    assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
 
 
 if __name__ == "__main__":
+    print("Starting mock server")
     _start_mock_server(
         port=len(sys.argv) > 1 and int(sys.argv[1]) or 8001,
         debug=_bool(os.environ.get("DEBUG", "False")),

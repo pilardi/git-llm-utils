@@ -6,7 +6,7 @@ sys.path.append("src")
 
 from types import SimpleNamespace
 from typing import Any
-from git_llm_utils.main import generate
+from git_llm_utils.main import generate, NO_CHANGES_MESSAGE
 from git_llm_utils.llm_cli import LLMClient
 
 
@@ -54,7 +54,7 @@ def test_generate_with_no_change(monkeypatch):
         max_output_tokens=1000,
     )
     res.seek(0)
-    assert res.read() == "No changes\n"
+    assert res.read() == f"{NO_CHANGES_MESSAGE}\n"
 
 
 def test_generate_with_comments(monkeypatch):
