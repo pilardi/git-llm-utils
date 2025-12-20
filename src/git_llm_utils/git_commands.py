@@ -18,13 +18,15 @@ def get_config(
     key: str,
     default_value: str | None = None,
     repository: Optional[str | Path] = None,
-    scope: Scope = Scope.LOCAL,
+    scope: Optional[Scope] = None,
     abort_on_error: bool = False,
     namespace: str = "git-llm-utils",
     valid_codes=_VALID_EXIT_CODES,
 ) -> Optional[str]:
     output = execute_command(
-        ["git", "config", "--get", f"--{scope.value}", f"{namespace}.{key}"],
+        scope is not None
+        and ["git", "config", "--get", f"--{scope.value}", f"{namespace}.{key}"]
+        or ["git", "config", "--get", f"{namespace}.{key}"],
         cwd=repository,
         abort_on_error=abort_on_error,
         valid_codes=valid_codes,

@@ -13,6 +13,13 @@ def _bool(value: Optional[str]) -> bool:
 
 
 class ErrorHandler:
+    NO_GIT_REPOSITORY = -1
+    INVALID_CLIENT = -2
+    CLIENT_NOT_DETECTED = -3
+    FILE_ALREADY_EXISTS = -4
+    INVALID_HOOK_TEMPLATE = -5
+    INVALID_SCOPE = -6
+
     GIT_LLM_DEBUG = "GIT_LLM_DEBUG"
     debug = _bool(os.environ.get(GIT_LLM_DEBUG))
 

@@ -19,9 +19,10 @@ from git_llm_utils.git_commands import (
 from git_llm_utils.llm_cli import LLMClient
 from os import environ
 from pathlib import Path
+from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
-from typing import Any, Callable, Optional, TextIO
+from typing import Any, Callable, Optional, TextIO, Tuple
 
 
 import sys
@@ -35,14 +36,46 @@ MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.sample"
 NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git commit -a")'
 
 
+class SettingLoader(BaseModel):
+    name: str
+    factory: Any | None
+    hint: str | None
+    parser: Callable[[str], Any] | Any = None
+
+    def load(self, scope: Optional[Scope] = None):
+        return _get_config(
+            self.name,
+            default_value=self.factory,
+            repository=Runtime.repository,
+            scope=scope,
+        )
+
+    def help(self, default: Any | None):
+        if self.parser == _bool:
+            return f"{self.hint} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{self.name}]"
+        return self.hint
+
+    def reload(self, option: typer.models.OptionInfo):
+        option.default = self.load()
+        option.help = self.help(default=option.default)
+
+
 class Runtime:
-    repository: Optional[Path] = None
+    repository: Optional[Path] = get_repository_path(abort_on_error=False)
     confirm: bool = True
     api_key: Optional[str] = None
+    settings: dict[str, Tuple[SettingLoader, typer.models.OptionInfo]] = {}
 
     @staticmethod
     def _set_repository(repository: str):
+        previous = Runtime.repository
         Runtime.repository = get_repository_path(repository=repository)
+        if previous != Runtime.repository:
+            # we reload the new defaults however the command parameters still reflec the old values
+            # we need to make the commands read the parameters from the settings rather that using the params
+            # or use another methanism to load the defaults
+            for loader, option in Runtime.settings.values():
+                loader.reload(option=option)
         return Runtime.repository
 
     @staticmethod
@@ -62,105 +95,98 @@ class Runtime:
         return api_key
 
     @staticmethod
-    def _get_setting(
+    def get_setting(setting: str, scope: Optional[Scope] = None) -> Optional[Any]:
+        return Runtime.settings[setting][0].load(scope=scope)
+
+    @staticmethod
+    def load_setting(
         name: str,
         factory: Any | None = None,
         parser: Callable[[str], Any] | Any = None,
-        help: str | None = None,
+        hint: str | None = None,
         expose_value: bool = True,
         envvar: Optional[str] = None,
         callback: Optional[Callable[..., Any]] = None,
-    ):
-        default = _get_config(
-            name, default_value=factory, repository=Runtime.repository
+    ) -> Tuple[SettingLoader, typer.models.OptionInfo]:
+        loader = SettingLoader(name=name, factory=factory, hint=hint, parser=parser)
+        default = loader.load()
+        option = typer.Option(  # type: ignore
+            default=default,
+            help=loader.help(default=default),
+            parser=parser,
+            envvar=envvar,
+            expose_value=expose_value,
+            show_default=parser != _bool,
+            callback=callback,
         )
-        if parser == _bool:
-            help = f"{help} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{name}]"
-
-        return (
-            name,
-            str(factory),
-            typer.Option(  # type: ignore
-                default=default,
-                help=help,
-                parser=parser,
-                envvar=envvar,
-                expose_value=expose_value,
-                show_default=parser != _bool,
-                callback=callback,
-            ),
-        )
+        Runtime.settings[name] = (loader, option)
+        return Runtime.settings[name]
 
 
 class Setting(Enum):
-    def __new__(
-        cls,
-        name: str,
-        factory: Any,
-        option: typer.Option,  # type: ignore
-    ):
+    def __new__(cls, loader: SettingLoader, option: typer.models.OptionInfo):
         enum = object.__new__(cls)
-        enum._value_ = name
-        enum.factory = factory  # type: ignore
+        enum._value_ = loader.name
+        enum.factory = loader.factory  # type: ignore
         enum.option = option  # type: ignore
         return enum
 
-    EMOJIS = Runtime._get_setting(
+    EMOJIS = Runtime.load_setting(
         "emojis",
         factory=True,
         parser=_bool,
-        help="If true will instruct the LLMs to add applicable emojis (see --config)",
+        hint="If true will instruct the LLMs to add applicable emojis (see --config)",
     )
-    COMMENTS = Runtime._get_setting(
+    COMMENTS = Runtime.load_setting(
         "comments",
         factory=True,
         parser=_bool,
-        help="If true will generate the commit message commented out so that saving it will exclude it from the commit message (see --config)",
+        hint="If true will generate the commit message commented out so that saving it will exclude it from the commit message (see --config)",
     )
-    MODEL = Runtime._get_setting(
+    MODEL = Runtime.load_setting(
         "model",
-        "ollama/qwen3-coder:480b-cloud",
-        help="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
+        factory="ollama/qwen3-coder:480b-cloud",
+        hint="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
     )
-    MAX_INPUT_TOKENS = Runtime._get_setting(
+    MAX_INPUT_TOKENS = Runtime.load_setting(
         "max_input_tokens",
-        help="How many tokens to send at most to the model",
         factory=262144,
         parser=int,
+        hint="How many tokens to send at most to the model",
     )
-    MAX_OUTPUT_TOKENS = Runtime._get_setting(
+    MAX_OUTPUT_TOKENS = Runtime.load_setting(
         "max_output_tokens",
-        help="How many tokens to get at most from the model",
         factory=32768,
         parser=int,
+        hint="How many tokens to get at most from the model",
     )
-    API_KEY = Runtime._get_setting(
+    API_KEY = Runtime.load_setting(
         "api_key",
         expose_value=False,
         envvar="GIT_LLM_API_KEY",
         callback=Runtime._set_api_key,
-        help="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
+        hint="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
     )
-    API_URL = Runtime._get_setting(
+    API_URL = Runtime.load_setting(
         "api_url",
-        help="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
+        hint="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
     )
-    DESCRIPTION_FILE = Runtime._get_setting(
+    DESCRIPTION_FILE = Runtime.load_setting(
         "description-file",
-        "README.md",
-        help="Description file of the purpose of the respository, usually a README.md file",
+        factory="README.md",
+        hint="Description file of the purpose of the respository, usually a README.md file",
     )
-    TOOLS = Runtime._get_setting(
+    TOOLS = Runtime.load_setting(
         "tools",
         factory=False,
         parser=_bool,
-        help="Whether to allow tools usage or not while requesting llm responses",
+        hint="Whether to allow tools usage or not while requesting llm responses",
     )
-    MANUAL = Runtime._get_setting(
+    MANUAL = Runtime.load_setting(
         "manual",
         factory=True,
         parser=_bool,
-        help=f"""If true will only generate the commit status message when called with the {OVERRIDE} environment variable set on True.
+        hint=f"""If true will only generate the commit status message when called with the {OVERRIDE} environment variable set on True.
 You can set an alias such as `git config --global alias.llmc '{COMMIT_ALIAS_GIT_COMMAND}'`
 If you want to generate a commit message for every commit, set `set-config manual --value False` (see --config)
         """,
@@ -181,14 +207,14 @@ def description(
 
 @app.command(help="Generates a status message based on the git staged changes")
 def status(
-    with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
-    model: str = Setting.MODEL.option,  # type: ignore
-    max_input_tokens: int = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None = Setting.API_URL.option,  # type: ignore
-    description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool = Setting.TOOLS.option,  # type: ignore
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
 ):
     generate(
         with_emojis=with_emojis,
@@ -209,16 +235,16 @@ def status(
     help=f"Generates a commit message based on the git staged changes for the {MESSAGE_HOOK} hook"
 )
 def generate(
-    with_emojis: bool = Setting.EMOJIS.option,  # type: ignore
-    with_comments: bool = Setting.COMMENTS.option,  # type: ignore
-    model: str = Setting.MODEL.option,  # type: ignore
-    max_input_tokens: int = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
     api_url: str | None = Setting.API_URL.option,  # type: ignore
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool = Setting.TOOLS.option,  # type: ignore
-    manual: bool = Setting.MANUAL.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    manual: bool | None = Setting.MANUAL.option,  # type: ignore
     manual_override: bool = typer.Option(
         None,
         "--override",
@@ -271,11 +297,7 @@ def get_config(
     setting: Setting,
     scope: Scope = Scope.LOCAL,
 ):
-    config = _get_config(
-        setting.value,
-        repository=Runtime.repository,
-        scope=scope,
-    )
+    config = Runtime.get_setting(setting=setting.value, scope=scope)
     if config:
         print(config)
     else:
@@ -297,7 +319,13 @@ def set_config(
     value: str | None = None,
     scope: Scope = Scope.LOCAL,
 ):
-    config = _get_config(setting.value, repository=Runtime.repository)
+    if scope == Scope.LOCAL and Runtime.repository is None:
+        print(
+            f"no git repository detected, use scope {Scope.SYSTEM.name} or {Scope.GLOBAL.name} to change {setting.name} settings or use the --repository option to specify the local scope"
+        )
+        raise typer.Exit(ErrorHandler.INVALID_SCOPE)
+
+    config = Runtime.get_setting(setting=setting.value, scope=scope)
     if value:
         if setting.option.parser:  # type: ignore
             value = setting.option.parser(value)  # type: ignore
@@ -306,7 +334,7 @@ def set_config(
         )
         _set_config(setting.value, value, scope=scope, repository=Runtime.repository)  # type: ignore
         print(
-            f"Updated {setting.value} to {_get_config(setting.value, repository=Runtime.repository)}"
+            f"Updated {setting.value} to {Runtime.get_setting(setting=setting.value, scope=scope)}"
         )
     else:
         if config:
@@ -334,7 +362,7 @@ def _show_config(show: bool):
         for setting in Setting:
             table.add_row(
                 setting.value,
-                setting.factory,  # type: ignore
+                str(setting.factory),  # type: ignore
                 str(setting.option.default),  # type: ignore
                 setting.option.help,  # type: ignore
             )  # type: ignore
@@ -392,19 +420,19 @@ def install_hook(overwrite: bool = OVERWRITE):
             "git-llm-utils version not detected, please run this command with the git-llm-utils client",
             file=sys.stderr,
         )
-        raise typer.Exit(-2)
+        raise typer.Exit(ErrorHandler.INVALID_CLIENT)
 
     if not program_name:
         print(
             "git-llm-utils not detected, please run this command with the git-llm-utils client",
             file=sys.stderr,
         )
-        raise typer.Exit(-3)
+        raise typer.Exit(ErrorHandler.CLIENT_NOT_DETECTED)
 
     if not Runtime.repository:
         if not Runtime._set_repository("."):
             print("No git repository detected in the current folder", file=sys.stderr)
-            raise typer.Exit(-4)
+            raise typer.Exit(ErrorHandler.NO_GIT_REPOSITORY)
 
     hook_template_path = (Path.cwd() / __file__).with_name(MESSAGE_HOOK_TEMPLATE)
     _confirm(
@@ -425,13 +453,13 @@ def install_hook(overwrite: bool = OVERWRITE):
                 f"Failed to write {MESSAGE_HOOK} to {hook_path}, use --overwrite if the hook is already installed",
                 file=sys.stderr,
             )
-            raise typer.Exit(-5)
+            raise typer.Exit(ErrorHandler.FILE_ALREADY_EXISTS)
     else:
         print(
             f"Failed to read {MESSAGE_HOOK_TEMPLATE} from {hook_template_path}",
             file=sys.stderr,
         )
-        raise typer.Exit(-6)
+        raise typer.Exit(ErrorHandler.INVALID_HOOK_TEMPLATE)
 
 
 @app.command(
@@ -496,4 +524,4 @@ if __name__ == "__main__":
             "Please run the app using the git-llm-utils command",
             file=sys.stderr,
         )
-        sys.exit(-1)
+        sys.exit(ErrorHandler.CLIENT_NOT_DETECTED)
