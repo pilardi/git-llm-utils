@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional
 
 import git_llm_utils
 import os
@@ -8,7 +8,9 @@ import sys
 import tomllib
 
 
-def _bool(value: Optional[str]) -> bool:
+def _bool(value: Optional[str | Any]) -> bool:
+    if type(value) is bool:
+        return value
     return value and value.lower() in ("1", "true", "yes") or False
 
 

@@ -38,32 +38,52 @@ NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git comm
 
 class SettingLoader(BaseModel):
     name: str
-    factory: Any | None
+    factory: Any | None  # the code value
+    config: Any | None  # the current config value
+    value: Any | None  # the cli value
     hint: str | None
     parser: Callable[[str], Any] | Any = None
 
-    def load(self, scope: Optional[Scope] = None):
-        return _get_config(
+    def load_config(self, scope: Optional[Scope] = None):
+        self.config = _get_config(
             self.name,
             default_value=self.factory,
             repository=Runtime.repository,
             scope=scope,
         )
+        if self.config is not None and self.parser:
+            self.config = self.parser(self.config)
+        return self.config
+
+    def reload_config(self, option: typer.models.OptionInfo):
+        option.default = self.load_config()
+        option.help = self.help(default=option.default)
 
     def help(self, default: Any | None):
         if self.parser == _bool:
             return f"{self.hint} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{self.name}]"
-        return self.hint
+        return f"{self.hint} [default: {str(default)}]"
 
-    def reload(self, option: typer.models.OptionInfo):
-        option.default = self.load()
-        option.help = self.help(default=option.default)
+    def set_value(self, value: Any):
+        if self.parser is None or value is None:
+            self.value = value
+        else:
+            self.value = self.parser(value)
+
+    def get_value(self, given: Any) -> Any | None:
+        ### TODO refactor this should be set when changing the value (the given is the only we should check)
+        if given is None:
+            if self.value is None:
+                if self.config is None:
+                    return self.factory
+                return self.config
+            return self.value
+        return given
 
 
 class Runtime:
     repository: Optional[Path] = get_repository_path(abort_on_error=False)
     confirm: bool = True
-    api_key: Optional[str] = None
     settings: dict[str, Tuple[SettingLoader, typer.models.OptionInfo]] = {}
 
     @staticmethod
@@ -71,11 +91,8 @@ class Runtime:
         previous = Runtime.repository
         Runtime.repository = get_repository_path(repository=repository)
         if previous != Runtime.repository:
-            # we reload the new defaults however the command parameters still reflec the old values
-            # we need to make the commands read the parameters from the settings rather that using the params
-            # or use another methanism to load the defaults
             for loader, option in Runtime.settings.values():
-                loader.reload(option=option)
+                loader.reload_config(option=option)
         return Runtime.repository
 
     @staticmethod
@@ -90,37 +107,41 @@ class Runtime:
         return Runtime.confirm
 
     @staticmethod
-    def _set_api_key(api_key: str):
-        Runtime.api_key = api_key
-        return api_key
-
-    @staticmethod
-    def get_setting(setting: str, scope: Optional[Scope] = None) -> Optional[Any]:
-        return Runtime.settings[setting][0].load(scope=scope)
-
-    @staticmethod
     def load_setting(
         name: str,
         factory: Any | None = None,
         parser: Callable[[str], Any] | Any = None,
         hint: str | None = None,
-        expose_value: bool = True,
         envvar: Optional[str] = None,
-        callback: Optional[Callable[..., Any]] = None,
     ) -> Tuple[SettingLoader, typer.models.OptionInfo]:
-        loader = SettingLoader(name=name, factory=factory, hint=hint, parser=parser)
-        default = loader.load()
+        loader = SettingLoader(
+            name=name,
+            factory=factory,
+            config=None,
+            value=None,
+            hint=hint,
+            parser=parser,
+        )
+        config = loader.load_config()
         option = typer.Option(  # type: ignore
-            default=default,
-            help=loader.help(default=default),
+            default=None,
+            help=loader.help(default=config),
             parser=parser,
             envvar=envvar,
-            expose_value=expose_value,
+            expose_value=False,
             show_default=parser != _bool,
-            callback=callback,
+            callback=lambda v: loader.set_value(v),
         )
         Runtime.settings[name] = (loader, option)
         return Runtime.settings[name]
+
+    @staticmethod
+    def get_config(setting: str, scope: Optional[Scope] = None) -> Optional[Any]:
+        return Runtime.settings[setting][0].load_config(scope=scope)
+
+    @staticmethod
+    def get_value(setting: str, given: Any = None) -> Optional[Any]:
+        return Runtime.settings[setting][0].get_value(given)
 
 
 class Setting(Enum):
@@ -162,14 +183,12 @@ class Setting(Enum):
     )
     API_KEY = Runtime.load_setting(
         "api_key",
-        expose_value=False,
         envvar="GIT_LLM_API_KEY",
-        callback=Runtime._set_api_key,
         hint="The api key to send to the model service (could use env based on the llm provider as in OPENAI_API_KEY)",
     )
     API_URL = Runtime.load_setting(
         "api_url",
-        hint="The api url if different than the model provider, as in ollama http://localhost:11434 by default",
+        hint="The api url if different for every  model provider, as in ollama it is http://localhost:11434 by default",
     )
     DESCRIPTION_FILE = Runtime.load_setting(
         "description-file",
@@ -255,29 +274,38 @@ def generate(
         hidden=True, parser=lambda _: sys.stdout, default=sys.stdout
     ),
 ):
-    if manual and not manual_override:
+    if Runtime.get_value(Setting.MANUAL.value, manual) and not manual_override:
+        ErrorHandler._report(f"requested manual {manual} but override was not set")
         return
 
     changes = get_staged_changes(repository=Runtime.repository)
     if changes:
-        commented = False
         file_path = (
             description_file
             and Path(Runtime.repository or ".", description_file)
             or None
         )
         client = LLMClient(
-            use_emojis=with_emojis,
-            model_name=model,
-            max_tokens=max_input_tokens,
-            max_output_tokens=max_output_tokens,
-            api_key=api_key or Runtime.api_key,
-            api_url=api_url,
-            use_tools=tools and file_path is not None and file_path.exists(),
+            use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),
+            model_name=Runtime.get_value(Setting.MODEL.value, model),
+            max_tokens=Runtime.get_value(
+                Setting.MAX_INPUT_TOKENS.value, max_input_tokens
+            ),
+            max_output_tokens=Runtime.get_value(
+                Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
+            ),
+            api_key=Runtime.get_value(Setting.API_KEY.value, api_key),
+            api_url=Runtime.get_value(Setting.API_URL.value, api_url),
+            use_tools=Runtime.get_value(Setting.TOOLS.value, tools)
+            and file_path is not None
+            and file_path.exists(),
             respository_description=lambda: read_file(file_path),  # type: ignore
         )
+        comments = Runtime.get_value(Setting.COMMENTS.value, with_comments)
+
+        commented = False
         for message in client.message(changes, stream=False):
-            if with_comments:
+            if comments:
                 if not commented:
                     print("# ", end="", file=output)
                     commented = True
@@ -297,7 +325,7 @@ def get_config(
     setting: Setting,
     scope: Scope = Scope.LOCAL,
 ):
-    config = Runtime.get_setting(setting=setting.value, scope=scope)
+    config = Runtime.get_config(setting=setting.value, scope=scope)
     if config:
         print(config)
     else:
@@ -325,7 +353,7 @@ def set_config(
         )
         raise typer.Exit(ErrorHandler.INVALID_SCOPE)
 
-    config = Runtime.get_setting(setting=setting.value, scope=scope)
+    config = Runtime.get_config(setting=setting.value, scope=scope)
     if value:
         if setting.option.parser:  # type: ignore
             value = setting.option.parser(value)  # type: ignore
@@ -334,7 +362,7 @@ def set_config(
         )
         _set_config(setting.value, value, scope=scope, repository=Runtime.repository)  # type: ignore
         print(
-            f"Updated {setting.value} to {Runtime.get_setting(setting=setting.value, scope=scope)}"
+            f"Updated {setting.value} to {Runtime.get_config(setting=setting.value, scope=scope)}"
         )
     else:
         if config:
@@ -363,7 +391,7 @@ def _show_config(show: bool):
             table.add_row(
                 setting.value,
                 str(setting.factory),  # type: ignore
-                str(setting.option.default),  # type: ignore
+                str(Runtime.get_value(setting=setting.value)),  # type: ignore
                 setting.option.help,  # type: ignore
             )  # type: ignore
         console.print(table)
