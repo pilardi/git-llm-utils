@@ -44,7 +44,7 @@ class SettingLoader(BaseModel):
     hint: str | None
     parser: Callable[[str], Any] | Any = None
 
-    def load_config(self, scope: Optional[Scope] = None):
+    def load_config(self, scope: Optional[Scope] = None) -> Tuple[Any, str]:
         self.config = _get_config(
             self.name,
             default_value=self.factory,
@@ -53,16 +53,13 @@ class SettingLoader(BaseModel):
         )
         if self.config is not None and self.parser:
             self.config = self.parser(self.config)
-        return self.config
-
-    def reload_config(self, option: typer.models.OptionInfo):
-        option.default = self.load_config()
-        option.help = self.help(default=option.default)
-
-    def help(self, default: Any | None):
         if self.parser == _bool:
-            return f"{self.hint} [default: {_bool(str(default)) and '--with-' or '--no-with-'}{self.name}]"
-        return f"{self.hint} [default: {str(default)}]"
+            help = f"{self.hint} [bold green]\\[default: {_bool(str(self.config)) and '--with-' or '--no-with-'}{self.name}][/bold green]"
+        else:
+            help = (
+                f"{self.hint} [bold green]\\[default: {str(self.config)}][/bold green]"
+            )
+        return (self.config, help)
 
     def set_value(self, value: Any):
         if self.parser is None or value is None:
@@ -71,14 +68,13 @@ class SettingLoader(BaseModel):
             self.value = self.parser(value)
 
     def get_value(self, given: Any) -> Any | None:
-        ### TODO refactor this should be set when changing the value (the given is the only we should check)
-        if given is None:
-            if self.value is None:
-                if self.config is None:
-                    return self.factory
-                return self.config
+        if given is not None:
+            return given
+        if self.value is not None:
             return self.value
-        return given
+        if self.config is not None:
+            return self.config
+        return self.factory
 
 
 class Runtime:
@@ -92,7 +88,7 @@ class Runtime:
         Runtime.repository = get_repository_path(repository=repository)
         if previous != Runtime.repository:
             for loader, option in Runtime.settings.values():
-                loader.reload_config(option=option)
+                (option.default, option.help) = loader.load_config()
         return Runtime.repository
 
     @staticmethod
@@ -122,10 +118,10 @@ class Runtime:
             hint=hint,
             parser=parser,
         )
-        config = loader.load_config()
+        (_, help) = loader.load_config()
         option = typer.Option(  # type: ignore
             default=None,
-            help=loader.help(default=config),
+            help=help,
             parser=parser,
             envvar=envvar,
             expose_value=False,
@@ -137,11 +133,15 @@ class Runtime:
 
     @staticmethod
     def get_config(setting: str, scope: Optional[Scope] = None) -> Optional[Any]:
-        return Runtime.settings[setting][0].load_config(scope=scope)
+        if setting in Runtime.settings:
+            return Runtime.settings[setting][0].load_config(scope=scope)
+        return None
 
     @staticmethod
     def get_value(setting: str, given: Any = None) -> Optional[Any]:
-        return Runtime.settings[setting][0].get_value(given)
+        if setting in Runtime.settings:
+            return Runtime.settings[setting][0].get_value(given)
+        return None
 
 
 class Setting(Enum):
@@ -213,7 +213,9 @@ If you want to generate a commit message for every commit, set `set-config manua
 
 
 app = typer.Typer(
-    help=get_tomlib_project().get("description", None), pretty_exceptions_enable=False
+    help=get_tomlib_project().get("description", None),
+    pretty_exceptions_enable=False,
+    rich_markup_mode="rich",
 )
 
 
@@ -286,19 +288,19 @@ def generate(
             or None
         )
         client = LLMClient(
-            use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),
-            model_name=Runtime.get_value(Setting.MODEL.value, model),
+            use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
+            model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
             max_tokens=Runtime.get_value(
                 Setting.MAX_INPUT_TOKENS.value, max_input_tokens
-            ),
+            ),  # type: ignore
             max_output_tokens=Runtime.get_value(
                 Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
-            ),
+            ),  # type: ignore
             api_key=Runtime.get_value(Setting.API_KEY.value, api_key),
             api_url=Runtime.get_value(Setting.API_URL.value, api_url),
             use_tools=Runtime.get_value(Setting.TOOLS.value, tools)
             and file_path is not None
-            and file_path.exists(),
+            and file_path.exists(),  # type: ignore
             respository_description=lambda: read_file(file_path),  # type: ignore
         )
         comments = Runtime.get_value(Setting.COMMENTS.value, with_comments)
@@ -541,12 +543,17 @@ def _(
     pass
 
 
+def run():
+    try:
+        app()
+    except KeyboardInterrupt:
+        print("Aborted!", file=sys.stderr)
+        sys.exit(0)
+
+
 if __name__ == "__main__":
     if getattr(sys, "frozen", False):
-        try:
-            app()
-        except KeyboardInterrupt:
-            typer.Abort()
+        run()
     else:
         print(
             "Please run the app using the git-llm-utils command",

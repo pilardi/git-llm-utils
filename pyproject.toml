@@ -49,4 +49,4 @@ dev = [
 module-name = "git_llm_utils"
 
 [project.scripts]
-git-llm-utils = "git_llm_utils.main:app"
+git-llm-utils = "git_llm_utils.main:run"

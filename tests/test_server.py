@@ -135,6 +135,15 @@ def repository(tmp_path_factory):
     return repository
 
 
+@pytest.fixture(scope="session")
+def repository_2(tmp_path_factory):
+    repository = tmp_path_factory.mktemp("repository")
+    execute_command(["git", "init", "."], cwd=repository)
+    execute_command(["cp", f"{os.getcwd()}/tests/files/test.txt", "."], cwd=repository)
+    execute_command(["git", "add", "test.txt"], cwd=repository)
+    return repository
+
+
 @pytest.mark.integration
 def test_status_with_no_emojis(cmd, repository, mock_server):
     status = _read_file("tests/files/status.out")
@@ -250,7 +259,9 @@ def test_generate_with_comments(cmd, repository, mock_server):
 
 
 @pytest.mark.integration
-def test_generate_with_comments_and_repository(cmd, repository, mock_server):
+def test_generate_with_comments_and_repository(
+    cmd, repository, repository_2, mock_server
+):
     status = _read_file("tests/files/generate_with_comments.out")
     args = cmd + [
         "--repository",
@@ -281,10 +292,11 @@ def test_generate_with_comments_and_repository(cmd, repository, mock_server):
     )
     del args[-1]
     assert status == execute_command(args)
+    assert status == execute_command(args, repository_2)
 
 
 @pytest.mark.integration
-def test_install_alias(cmd, repository):
+def test_install_alias(cmd, repository, repository_2):
     execute_command(
         cmd
         + [
@@ -295,6 +307,18 @@ def test_install_alias(cmd, repository):
     )
     output = execute_command(
         ["git", "config", "--get", f"alias.{COMMIT_ALIAS}"], cwd=repository
+    )
+    assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
+
+    execute_command(
+        cmd
+        + [
+            "install-alias",
+        ],
+        cwd=repository_2,
+    )
+    output = execute_command(
+        ["git", "config", "--get", f"alias.{COMMIT_ALIAS}"], cwd=repository_2
     )
     assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
 
