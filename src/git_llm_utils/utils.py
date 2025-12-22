@@ -21,18 +21,25 @@ class ErrorHandler:
     FILE_ALREADY_EXISTS = -4
     INVALID_HOOK_TEMPLATE = -5
     INVALID_SCOPE = -6
+    UNDEFINED_ERROR = -7
 
     GIT_LLM_DEBUG = "GIT_LLM_DEBUG"
     debug = _bool(os.environ.get(GIT_LLM_DEBUG))
 
     @staticmethod
-    def _report(message: str, file=sys.stdout, show: bool = debug, *args, **kwargs):
-        if show:
+    def _report(
+        message: str, file=sys.stderr, show: bool | None = None, *args, **kwargs
+    ):
+        if ErrorHandler.debug or show:
             print(message, file=file, *args, **kwargs)
 
     @staticmethod
-    def _report_error(message: str, show: bool = debug, *args, **kwargs):
-        ErrorHandler._report(message, file=sys.stderr, show=show, *args, **kwargs)
+    def report_error(message: str, show: bool | None = None, *args, **kwargs):
+        ErrorHandler._report(f"ERROR: {message}", show=show, *args, **kwargs)
+
+    @staticmethod
+    def report_debug(message: str, show: bool | None = None, *args, **kwargs):
+        ErrorHandler._report(f"DEBUG: {message}", show=show, *args, **kwargs)
 
 
 def execute_background_command(
@@ -51,7 +58,7 @@ def execute_background_command(
     except subprocess.CalledProcessError as e:
         if abort_on_error:
             raise Exception(f"Failed to execute background command: {command}", e)
-        ErrorHandler._report_error(
+        ErrorHandler.report_error(
             f"Failed to execute background command: {command} -> {e}"
         )
     return None
@@ -63,9 +70,9 @@ def execute_command(
     cwd: Optional[str | Path] = None,
     valid_codes: Iterable[int] = [0],
 ) -> str | None:
-    ErrorHandler._report(f"Will run command: {command}")
+    ErrorHandler.report_debug(f"Will run command: {command}")
     try:
-        process = subprocess.run(
+        result = subprocess.run(
             command,
             capture_output=True,
             text=True,
@@ -75,12 +82,12 @@ def execute_command(
             errors="replace",
             cwd=cwd,
         )
-        return process.stdout
+        return result.stdout
     except subprocess.CalledProcessError as e:
         if e.returncode not in valid_codes:
             if abort_on_error:
                 raise Exception(f"Failed to execute command: {command}", e)
-            ErrorHandler._report_error(f"Failed to execute command: {command} -> {e}")
+            ErrorHandler.report_error(f"Failed to execute command: {command} -> {e}")
     return None
 
 
@@ -90,7 +97,7 @@ def get_tomlib_project() -> Dict:
             data = tomllib.load(f)
         return data["project"]
     except Exception as e:
-        ErrorHandler._report_error(f"failed to read pyproject {e}")
+        ErrorHandler.report_error(f"failed to read pyproject {e}")
         return {}
 
 
@@ -100,9 +107,9 @@ def read_file(file_path: Path | None) -> Optional[str]:
             with open(file_path, "r") as file:
                 return file.read()
         except Exception as e:
-            ErrorHandler._report_error(f"Failed to read {file_path}: {e}")
+            ErrorHandler.report_error(f"Failed to read {file_path}: {e}")
     else:
-        ErrorHandler._report_error(f"File {file_path} does not exist")
+        ErrorHandler.report_error(f"File {file_path} does not exist")
     return None
 
 
@@ -113,9 +120,9 @@ def write_file(file_path: Path, content: str = "", overwrite: bool = False) -> b
                 file.write(content)
                 return True
         except Exception as e:
-            ErrorHandler._report_error(f"Failed to write {file_path}: {e}")
+            ErrorHandler.report_error(f"Failed to write {file_path}: {e}")
     else:
-        ErrorHandler._report_error(
+        ErrorHandler.report_error(
             f"File {file_path} already exist, use overwrite if needed"
         )
     return False
@@ -125,5 +132,5 @@ def read_version() -> str:
     try:
         return git_llm_utils.__version__
     except Exception as e:
-        ErrorHandler._report_error(f"Failed to get version {e}")
+        ErrorHandler.report_error(f"Failed to get version {e}")
         return "undefined"

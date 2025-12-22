@@ -58,7 +58,7 @@ tests/dist/bin: dist
 
 tests/dist/git-llm-utils: dist/git-llm-utils
 	@echo "== Running integration tests over executable dist =="
-	uv run pytest -s -m "integration"
+	uv run pytest -m "integration"
 
 clean/dist:
 	@echo "Removing dist ..."

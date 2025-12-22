@@ -1,9 +1,9 @@
 from pydantic import BaseModel, Field
 from typing import Any, Callable, Generator
-from litellm import completion
 from git_llm_utils.utils import ErrorHandler
 
 import json
+import litellm
 
 system_prompt_pre = """
 You are an expert software engineer and technical writer. Your sole task is to analyze the provided **'git diff --staged' output** and generate a professional, descriptive, and concise **Git commit message**.
@@ -313,7 +313,7 @@ class LLMClient(BaseModel):
             try:
                 return self.respository_description()
             except Exception as e:
-                ErrorHandler._report_error(f"Failed to get repository description: {e}")
+                ErrorHandler.report_error(f"Failed to get repository description: {e}")
         return ""
 
     def _available_tools(self) -> dict:
@@ -348,7 +348,7 @@ class LLMClient(BaseModel):
         incomplete = True
         interaction = 1
         while incomplete:
-            response = completion(
+            response = litellm.completion(
                 model=f"{self.model_name}",
                 messages=messages,
                 tools=interaction < self.max_iterations and tools or [],

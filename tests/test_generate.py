@@ -74,7 +74,7 @@ def test_generate_with_comments(monkeypatch):
         output=res,
     )
     res.seek(0)
-    assert res.read() == "# test\n"
+    assert res.read() == "# test"
 
 
 def test_generate_without_comments(monkeypatch):
@@ -94,4 +94,4 @@ def test_generate_without_comments(monkeypatch):
         output=res,
     )
     res.seek(0)
-    assert res.read() == "test\n"
+    assert res.read() == "test"

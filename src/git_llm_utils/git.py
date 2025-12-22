@@ -5,7 +5,7 @@ from typing import Optional
 
 import sys
 
-_VALID_EXIT_CODES = [0, 1]
+_VALID_EXIT_CODES = [0]
 
 
 class Scope(Enum):

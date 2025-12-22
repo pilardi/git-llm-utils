@@ -15,6 +15,7 @@ import sys
 import time
 
 API_KEY_TOKEN = "test"
+API_MODEL = "openai/test"
 
 app = Flask(__name__)
 
@@ -100,7 +101,7 @@ def _start_mock_server(port: int = 8001, debug: bool = False):
 
 
 @pytest.fixture(scope="session")
-def mock_server(request):
+def mock_server(request: pytest.FixtureRequest):
     def shudown_server(process):
         print("Stopping Mock server")
         try:
@@ -122,145 +123,168 @@ def mock_server(request):
 
 
 @pytest.fixture(scope="session")
-def cmd(request):
+def cmd(request: pytest.FixtureRequest):
     return request.config.getoption("--cmd").split() + ["--no-confirm"]
 
 
-@pytest.fixture(scope="session")
-def repository(tmp_path_factory):
-    repository = tmp_path_factory.mktemp("repository")
+def _init_repo(repository):
     execute_command(["git", "init", "."], cwd=repository)
     execute_command(["cp", f"{os.getcwd()}/tests/files/test.txt", "."], cwd=repository)
     execute_command(["git", "add", "test.txt"], cwd=repository)
+    execute_command(
+        ["cp", f"{os.getcwd()}/tests/files/test.txt", "./test_2.txt"], cwd=repository
+    )
     return repository
 
 
-@pytest.fixture(scope="session")
-def repository_2(tmp_path_factory):
-    repository = tmp_path_factory.mktemp("repository")
-    execute_command(["git", "init", "."], cwd=repository)
-    execute_command(["cp", f"{os.getcwd()}/tests/files/test.txt", "."], cwd=repository)
-    execute_command(["git", "add", "test.txt"], cwd=repository)
-    return repository
+@pytest.fixture(scope="function")
+def repository(tmp_path_factory: pytest.TempPathFactory):
+    return _init_repo(tmp_path_factory.mktemp("repository"))
+
+
+@pytest.fixture(scope="function")
+def repository_2(tmp_path_factory: pytest.TempPathFactory):
+    return _init_repo(tmp_path_factory.mktemp("repository"))
 
 
 @pytest.mark.integration
-def test_status_with_no_emojis(cmd, repository, mock_server):
+def test_status_with_no_emojis(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/status.out")
     args = cmd + [
+        "--debug",
         "status",
         "--api-url",
         mock_server,
         "--model",
-        "openai/test",
+        API_MODEL,
         "--api-key",
         API_KEY_TOKEN,
         "--no-with-emojis",
     ]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
     execute_command(  # update settings
         cmd + ["set-config", "emojis", "--scope", "local", "--value", "False"],
         cwd=repository,
     )
     del args[-1]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
 
 
 @pytest.mark.integration
-def test_status_with_emojis(cmd, repository, mock_server):
+def test_status_with_emojis(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/status_with_emojis.out")
     args = cmd + [
         "status",
         "--api-url",
         mock_server,
         "--model",
-        "openai/test",
+        API_MODEL,
         "--api-key",
         API_KEY_TOKEN,
         "--with-emojis",
     ]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
     execute_command(  # update settings
         cmd + ["set-config", "emojis", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
     del args[-1]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
 
 
 @pytest.mark.integration
-def test_generate_with_no_comments(cmd, repository, mock_server):
+def test_generate_with_no_comments(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/generate_with_no_comments.out")
     args = cmd + [
         "generate",
         "--api-url",
         mock_server,
         "--model",
-        "openai/test",
+        API_MODEL,
         "--api-key",
         API_KEY_TOKEN,
         "--no-manual",
         "--no-with-comments",
     ]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
     execute_command(  # update settings
         cmd + ["set-config", "comments", "--scope", "local", "--value", "False"],
         cwd=repository,
     )
     del args[-1]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
 
 
 @pytest.mark.integration
-def test_generate_with_comments(cmd, repository, mock_server):
+def test_generate_with_comments(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/generate_with_comments.out")
     args = cmd + [
         "generate",
         "--api-url",
         mock_server,
         "--model",
-        "openai/test",
+        API_MODEL,
         "--api-key",
         API_KEY_TOKEN,
         "--no-manual",
         "--with-comments",
     ]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
     execute_command(  # update settings
         cmd + ["set-config", "comments", "--scope", "local", "--value", "True"],
         cwd=repository,
     )
     del args[-1]
-    assert status == execute_command(
+    cli_status = execute_command(
         args,
         cwd=repository,
     )
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
 
 
 @pytest.mark.integration
 def test_generate_with_comments_and_repository(
-    cmd, repository, repository_2, mock_server
+    cmd: list[str], repository: str, repository_2: str, mock_server: str
 ):
     status = _read_file("tests/files/generate_with_comments.out")
     args = cmd + [
@@ -270,13 +294,16 @@ def test_generate_with_comments_and_repository(
         "--api-url",
         mock_server,
         "--model",
-        "openai/test",
+        API_MODEL,
         "--api-key",
         API_KEY_TOKEN,
         "--no-manual",
         "--with-comments",
     ]
-    assert status == execute_command(args)
+    cli_status = execute_command(args)
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
     execute_command(  # update settings
         cmd
         + [
@@ -291,12 +318,22 @@ def test_generate_with_comments_and_repository(
         ]
     )
     del args[-1]
-    assert status == execute_command(args)
-    assert status == execute_command(args, repository_2)
+
+    cli_status = execute_command(args)
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
+
+    cli_status = execute_command(args, cwd=repository_2)
+    assert cli_status is not None
+    assert status == cli_status.rstrip()
 
 
 @pytest.mark.integration
-def test_install_alias(cmd, repository, repository_2):
+def test_install_alias(
+    cmd: list[str],
+    repository: str,
+    repository_2: str,
+):
     execute_command(
         cmd
         + [
@@ -324,7 +361,7 @@ def test_install_alias(cmd, repository, repository_2):
 
 
 @pytest.mark.integration
-def test_install_alias_command(cmd, repository):
+def test_install_alias_command(cmd: list[str], repository: str):
     execute_command(
         cmd + ["--repository", repository, "install-alias", "--command", "integration"]
     )
@@ -335,7 +372,7 @@ def test_install_alias_command(cmd, repository):
 
 
 @pytest.mark.integration
-def test_install_hook(cmd, repository):
+def test_install_hook(cmd: list[str], repository: str):
     def verify():
         hook = _read_file(".git/hooks/prepare-commit-msg", base_path=repository)
         cli = [] + cmd
@@ -351,8 +388,14 @@ def test_install_hook(cmd, repository):
     verify()
 
 
-@pytest.mark.integration
-def test_install(cmd, repository):
+def _install(
+    cmd,
+    repository,
+    mock_server,
+    alias: str = COMMIT_ALIAS_GIT_COMMAND,
+    auth_token: str = API_KEY_TOKEN,
+    model: str = API_MODEL,
+):
     execute_command(
         cmd
         + [
@@ -361,8 +404,48 @@ def test_install(cmd, repository):
             "install",
             "--overwrite",
             "--command",
-            "llmc-installed",
+            alias,
         ]
+    )
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "api_key",
+            "--value",
+            auth_token,
+        ]
+    )
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "api_url",
+            "--value",
+            mock_server,
+        ]
+    )
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "model",
+            "--value",
+            model,
+        ]
+    )
+
+
+@pytest.mark.integration
+def test_install(cmd: list[str], repository: str, mock_server: str):
+    _install(
+        cmd=cmd, repository=repository, mock_server=mock_server, alias="llmc-installed"
     )
     hook = _read_file(".git/hooks/prepare-commit-msg", base_path=repository)
     cli = [] + cmd
@@ -377,6 +460,72 @@ def test_install(cmd, repository):
         ["git", "config", "--get", "alias.llmc-installed"], cwd=repository
     )
     assert COMMIT_ALIAS_GIT_COMMAND == (output is not None and output.strip() or None)
+
+
+@pytest.mark.integration
+def test_manual_hook_commit_messages(
+    cmd: list[str], repository: str, repository_2: str, mock_server: str
+):
+    _install(cmd=cmd, repository=repository, mock_server=mock_server)
+    _install(cmd=cmd, repository=repository_2, mock_server=mock_server)
+    changeset = execute_command(
+        ["git", "commit", "-m", "<COMMENT>"],
+        cwd=repository,
+    )
+    assert changeset is not None
+
+    cli_message = execute_command(["git", "log", "--format=%B", "-1"], cwd=repository)
+    assert cli_message is not None
+    assert "<COMMENT>" == cli_message.rstrip()
+
+    changeset = execute_command(
+        ["git", COMMIT_ALIAS, "-m", "<COMMENT>"],
+        cwd=repository_2,
+    )
+    assert changeset is not None
+
+    cli_message = execute_command(["git", "log", "--format=%B", "-1"], cwd=repository_2)
+    assert cli_message is not None
+    status = f"{_read_file('tests/files/generate_with_comments.out')}\n<COMMENT>"
+    assert status == cli_message.rstrip()
+
+
+@pytest.mark.integration
+def test_auto_hook_commit_messages(cmd: list[str], repository: str, mock_server: str):
+    _install(cmd=cmd, repository=repository, mock_server=mock_server)
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "manual",
+            "--value",
+            "False",
+        ]
+    )
+    execute_command(
+        cmd
+        + [
+            "--repository",
+            repository,
+            "set-config",
+            "comments",
+            "--value",
+            "False",
+        ]
+    )
+
+    changeset = execute_command(
+        ["git", "commit", "-m", "<COMMENT>"],
+        cwd=repository,
+    )
+    assert changeset is not None
+
+    cli_message = execute_command(["git", "log", "--format=%B", "-1"], cwd=repository)
+    assert cli_message is not None
+    status = f"{_read_file('tests/files/generate_with_no_comments.out')}\n<COMMENT>"
+    assert status == cli_message.rstrip()
 
 
 if __name__ == "__main__":

@@ -3,9 +3,9 @@ import sys
 
 def run():
     try:
-        from git_llm_utils.app import app
+        from git_llm_utils.app import safe_run
 
-        app()
+        safe_run()
     except KeyboardInterrupt:
         print("Aborted!", file=sys.stderr)
         sys.exit(0)

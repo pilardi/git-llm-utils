@@ -38,15 +38,17 @@ NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git comm
 
 class SettingLoader(BaseModel):
     name: str
+    key: str
     factory: Any | None  # the code value
     config: Any | None  # the current config value
     value: Any | None  # the cli value
     hint: str | None
+    bool_hint: str | None = "with-"
     parser: Callable[[str], Any] | Any = None
 
     def load_config(self, scope: Optional[Scope] = None) -> Tuple[Any, str]:
         self.config = _get_config(
-            self.name,
+            self.key,
             default_value=self.factory,
             repository=Runtime.repository,
             scope=scope,
@@ -54,7 +56,7 @@ class SettingLoader(BaseModel):
         if self.config is not None and self.parser:
             self.config = self.parser(self.config)
         if self.parser == _bool:
-            help = f"{self.hint} [bold green]\\[default: {_bool(str(self.config)) and '--with-' or '--no-with-'}{self.name}][/bold green]"
+            help = f"{self.hint} [bold green]\\[default: {_bool(str(self.config)) and f'--{self.bool_hint}' or f'--no-{self.bool_hint}'}{self.name}][/bold green]"
         else:
             help = (
                 f"{self.hint} [bold green]\\[default: {str(self.config)}][/bold green]"
@@ -108,14 +110,17 @@ class Runtime:
         factory: Any | None = None,
         parser: Callable[[str], Any] | Any = None,
         hint: str | None = None,
+        bool_hint: str | None = "with-",
         envvar: Optional[str] = None,
     ) -> Tuple[SettingLoader, typer.models.OptionInfo]:
         loader = SettingLoader(
             name=name,
+            key=name.strip().replace("_", "-"),
             factory=factory,
             config=None,
             value=None,
             hint=hint,
+            bool_hint=bool_hint,
             parser=parser,
         )
         (_, help) = loader.load_config()
@@ -134,8 +139,18 @@ class Runtime:
     @staticmethod
     def get_config(setting: str, scope: Optional[Scope] = None) -> Optional[Any]:
         if setting in Runtime.settings:
-            return Runtime.settings[setting][0].load_config(scope=scope)
+            return Runtime.settings[setting][0].load_config(scope=scope)[0]
         return None
+
+    @staticmethod
+    def set_config(
+        setting: str, scope: Scope, value: Optional[str] = None
+    ) -> Optional[Any]:
+        s = Runtime.settings[setting][0]
+        if value is not None:
+            _set_config(s.key, value, scope=scope, repository=Runtime.repository)
+        else:
+            unset_config(s.key, scope=scope, repository=Runtime.repository)
 
     @staticmethod
     def get_value(setting: str, given: Any = None) -> Optional[Any]:
@@ -205,6 +220,7 @@ class Setting(Enum):
         "manual",
         factory=True,
         parser=_bool,
+        bool_hint="",
         hint=f"""If true will only generate the commit status message when called with the {OVERRIDE} environment variable set on True.
 You can set an alias such as `git config --global alias.llmc '{COMMIT_ALIAS_GIT_COMMAND}'`
 If you want to generate a commit message for every commit, set `set-config manual --value False` (see --config)
@@ -277,7 +293,7 @@ def generate(
     ),
 ):
     if Runtime.get_value(Setting.MANUAL.value, manual) and not manual_override:
-        ErrorHandler._report(f"requested manual {manual} but override was not set")
+        ErrorHandler.report_debug(f"requested manual {manual} but override was not set")
         return
 
     changes = get_staged_changes(repository=Runtime.repository)
@@ -308,16 +324,15 @@ def generate(
         commented = False
         for message in client.message(changes, stream=False):
             if comments:
-                if not commented:
-                    print("# ", end="", file=output)
-                    commented = True
                 for c in message:
+                    if not commented:
+                        print("# ", end="", file=output)
+                        commented = True
                     print(c, end="", file=output)
                     if c == "\n":
-                        print("# ", end="", file=output)
+                        commented = False
             else:
                 print(message, end="", file=output)
-        print(file=output)
     else:
         print(NO_CHANGES_MESSAGE, file=output)
 
@@ -350,8 +365,9 @@ def set_config(
     scope: Scope = Scope.LOCAL,
 ):
     if scope == Scope.LOCAL and Runtime.repository is None:
-        print(
-            f"no git repository detected, use scope {Scope.SYSTEM.name} or {Scope.GLOBAL.name} to change {setting.name} settings or use the --repository option to specify the local scope"
+        ErrorHandler.report_error(
+            f"no git repository detected, use scope {Scope.SYSTEM.name} or {Scope.GLOBAL.name} to change {setting.name} settings or use the --repository option to specify the local scope",
+            show=True,
         )
         raise typer.Exit(ErrorHandler.INVALID_SCOPE)
 
@@ -362,7 +378,7 @@ def set_config(
         _confirm(
             f"Are you sure you want to update the setting: {setting.value} from {config} to {value}?",
         )
-        _set_config(setting.value, value, scope=scope, repository=Runtime.repository)  # type: ignore
+        Runtime.set_config(setting.value, scope=scope, value=value)  # type: ignore
         print(
             f"Updated {setting.value} to {Runtime.get_config(setting=setting.value, scope=scope)}"
         )
@@ -371,7 +387,7 @@ def set_config(
             _confirm(
                 f"Are you sure you want to remove the {setting.value} setting value: {config}?",
             )
-            unset_config(setting.value, scope=scope, repository=Runtime.repository)
+            (Runtime.set_config(setting.value, scope=scope),)  # type: ignore
             print(f"Restored {setting.value} to {setting.factory} [default-value]")  # type: ignore
         else:
             print(
@@ -446,22 +462,24 @@ def install_hook(overwrite: bool = OVERWRITE):
     cmd.append("--version")
     version = execute_command(cmd)
     if not version or read_version() not in version:
-        print(
+        ErrorHandler.report_error(
             "git-llm-utils version not detected, please run this command with the git-llm-utils client",
-            file=sys.stderr,
+            show=True,
         )
         raise typer.Exit(ErrorHandler.INVALID_CLIENT)
 
     if not program_name:
-        print(
+        ErrorHandler.report_error(
             "git-llm-utils not detected, please run this command with the git-llm-utils client",
-            file=sys.stderr,
+            show=True,
         )
         raise typer.Exit(ErrorHandler.CLIENT_NOT_DETECTED)
 
     if not Runtime.repository:
         if not Runtime._set_repository("."):
-            print("No git repository detected in the current folder", file=sys.stderr)
+            ErrorHandler.report_error(
+                "No git repository detected in the current folder", show=True
+            )
             raise typer.Exit(ErrorHandler.NO_GIT_REPOSITORY)
 
     hook_template_path = (Path.cwd() / __file__).with_name(MESSAGE_HOOK_TEMPLATE)
@@ -479,15 +497,15 @@ def install_hook(overwrite: bool = OVERWRITE):
         if write_file(Path(hook_path), hook, overwrite=overwrite):
             execute_command(["chmod", "+x", hook_path])
         else:
-            print(
+            ErrorHandler.report_error(
                 f"Failed to write {MESSAGE_HOOK} to {hook_path}, use --overwrite if the hook is already installed",
-                file=sys.stderr,
+                show=True,
             )
             raise typer.Exit(ErrorHandler.FILE_ALREADY_EXISTS)
     else:
-        print(
+        ErrorHandler.report_error(
             f"Failed to read {MESSAGE_HOOK_TEMPLATE} from {hook_template_path}",
-            file=sys.stderr,
+            show=True,
         )
         raise typer.Exit(ErrorHandler.INVALID_HOOK_TEMPLATE)
 
@@ -541,3 +559,13 @@ def _(
     ),
 ):
     pass
+
+
+def safe_run():
+    try:
+        app()
+    except Exception as e:
+        ErrorHandler.report_error(f"Application failed: {e}", show=True)
+        if ErrorHandler.debug:
+            raise e
+        typer.Exit(ErrorHandler.UNDEFINED_ERROR)
