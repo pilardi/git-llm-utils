@@ -5,7 +5,7 @@ from git_llm_utils.utils import (
     execute_background_command,
     read_file,
 )
-from git_llm_utils.main import COMMIT_ALIAS, COMMIT_ALIAS_GIT_COMMAND
+from git_llm_utils.app import COMMIT_ALIAS, COMMIT_ALIAS_GIT_COMMAND
 from pathlib import Path
 from typing import Callable, Optional
 import os

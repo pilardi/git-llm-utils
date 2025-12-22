@@ -26,13 +26,13 @@ class ErrorHandler:
     debug = _bool(os.environ.get(GIT_LLM_DEBUG))
 
     @staticmethod
-    def _report(message: str, file=sys.stdout, *args, **kwargs):
-        if ErrorHandler.debug:
+    def _report(message: str, file=sys.stdout, show: bool = debug, *args, **kwargs):
+        if show:
             print(message, file=file, *args, **kwargs)
 
     @staticmethod
-    def _report_error(message: str, *args, **kwargs):
-        ErrorHandler._report(message, file=sys.stderr, *args, **kwargs)
+    def _report_error(message: str, show: bool = debug, *args, **kwargs):
+        ErrorHandler._report(message, file=sys.stderr, show=show, *args, **kwargs)
 
 
 def execute_background_command(

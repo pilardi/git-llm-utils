@@ -6,8 +6,8 @@ sys.path.append("src")
 
 from types import SimpleNamespace
 from typing import Any
-from git_llm_utils.main import generate, NO_CHANGES_MESSAGE
-from git_llm_utils.llm_cli import LLMClient
+from git_llm_utils.app import generate, NO_CHANGES_MESSAGE
+from git_llm_utils.llm import LLMClient
 
 
 def _mock_changes(monkeypatch, changes: str | Any):
