@@ -38,27 +38,27 @@ dist/git-llm-utils: install
 
 tests:
 	@echo "== Running python tests =="
-	uv run pytest -m "not integration"
+	uv run pytest ${PY_TESTS_FLAGS} -m "not integration"
 
 tests/src: dist
 	@echo "== Running python tests over source dist =="
-	uv run --isolated --no-project --with dist/*.tar.gz pytest $(DISTRIBUTION_TESTS)
+	uv run --isolated --no-project --with dist/*.tar.gz pytest ${PY_TESTS_FLAGS} $(DISTRIBUTION_TESTS)
 
 tests/bin: dist
 	@echo "== Running python tests over bin dist =="
-	uv run --isolated --no-project --with dist/*.whl pytest $(DISTRIBUTION_TESTS)
+	uv run --isolated --no-project --with dist/*.whl pytest ${PY_TESTS_FLAGS} $(DISTRIBUTION_TESTS)
 
 tests/dist/src: dist
 	@echo "== Running integration tests over src dist =="
-	uv run pytest -m "integration" --cmd "uv run --isolated --no-project --with `find $$PWD/dist -type f -name '*.tar.gz'` git-llm-utils"
+	uv run pytest ${PY_TESTS_FLAGS} -m "integration" --cmd "uv run --isolated --no-project --with `find $$PWD/dist -type f -name '*.tar.gz'` git-llm-utils"
 
 tests/dist/bin: dist
 	@echo "== Running integration tests over bin dist =="
-	uv run pytest -m "integration" --cmd "uv run --isolated --no-project --with `find $$PWD/dist -type f -name '*.whl'` git-llm-utils"
+	uv run pytest ${PY_TESTS_FLAGS} -m "integration" --cmd "uv run --isolated --no-project --with `find $$PWD/dist -type f -name '*.whl'` git-llm-utils"
 
 tests/dist/git-llm-utils: dist/git-llm-utils
 	@echo "== Running integration tests over executable dist =="
-	uv run pytest -m "integration"
+	uv run pytest ${PY_TESTS_FLAGS} -m "integration"
 
 clean/dist:
 	@echo "Removing dist ..."
