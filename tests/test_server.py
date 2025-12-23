@@ -4,6 +4,7 @@ from git_llm_utils.utils import (
     execute_command,
     execute_background_command,
     read_file,
+    ErrorHandler,
 )
 from git_llm_utils.app import COMMIT_ALIAS, COMMIT_ALIAS_GIT_COMMAND
 from pathlib import Path
@@ -122,7 +123,7 @@ def mock_server(request: pytest.FixtureRequest):
     return f"http://127.0.0.1:{port}"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def cmd(request: pytest.FixtureRequest):
     return request.config.getoption("--cmd").split() + ["--no-confirm"]
 
@@ -145,6 +146,24 @@ def repository(tmp_path_factory: pytest.TempPathFactory):
 @pytest.fixture(scope="function")
 def repository_2(tmp_path_factory: pytest.TempPathFactory):
     return _init_repo(tmp_path_factory.mktemp("repository"))
+
+
+@pytest.mark.integration
+def test_verify(cmd: list[str], mock_server: str):
+    verification = _read_file("tests/files/verification.out")
+    args = cmd + [
+        "verify",
+        "--api-url",
+        mock_server,
+        "--model",
+        API_MODEL,
+        "--api-key",
+        API_KEY_TOKEN,
+        "--no-with-emojis",
+    ]
+    cli_status = execute_command(args)
+    assert cli_status is not None
+    assert verification == cli_status.rstrip()
 
 
 @pytest.mark.integration
@@ -530,12 +549,111 @@ def test_auto_hook_commit_messages(cmd: list[str], repository: str, mock_server:
 
 @pytest.mark.integration
 def test_command(cmd: list[str], repository: str, mock_server: str):
-    pass  # TODO add command test
+    changeset = execute_command(
+        cmd
+        + [
+            "command",
+            "--api-url",
+            mock_server,
+            "--model",
+            API_MODEL,
+            "--api-key",
+            API_KEY_TOKEN,
+            "--no-with-comments",
+            "--",
+            "git",
+            "commit",
+            "--date=2025-12-31",
+            "-F",
+            "-",
+        ],
+        abort_on_error=True,
+        cwd=repository,
+    )
+    assert changeset is not None
+    assert "2025" in changeset
+
+    cli_message = execute_command(["git", "log", "--format=%B", "-1"], cwd=repository)
+    assert cli_message is not None
+    status = f"{_read_file('tests/files/generate_with_no_comments.out')}"
+    assert status == cli_message.rstrip()
+
+
+@pytest.mark.integration
+def test_command_with_editor(cmd: list[str], repository: str, mock_server: str):
+    del cmd[-1]  # we want it to be interactive
+    changeset = execute_command(
+        cmd
+        + [
+            "command",
+            "--editor",
+            "touch",
+            "--api-url",
+            mock_server,
+            "--model",
+            API_MODEL,
+            "--api-key",
+            API_KEY_TOKEN,
+            "--",
+            "git",
+            "commit",
+            "--date=2025-12-31",
+            "-F",
+            "-",
+        ],
+        abort_on_error=True,
+        valid_codes=[0, 256 + ErrorHandler.EMPTY_MESSAGE],
+        cwd=repository,
+    )
+    assert changeset is None
 
 
 @pytest.mark.integration
 def test_commit(cmd: list[str], repository: str, mock_server: str):
-    pass  # TODO add commit test
+    changeset = execute_command(
+        cmd
+        + [
+            "commit",
+            "--api-url",
+            mock_server,
+            "--model",
+            API_MODEL,
+            "--api-key",
+            API_KEY_TOKEN,
+            "--no-with-comments",
+        ],
+        abort_on_error=True,
+        cwd=repository,
+    )
+    assert changeset is not None
+
+    cli_message = execute_command(["git", "log", "--format=%B", "-1"], cwd=repository)
+    assert cli_message is not None
+    status = f"{_read_file('tests/files/generate_with_no_comments.out')}"
+    assert status == cli_message.rstrip()
+
+
+@pytest.mark.integration
+def test_commit_with_editor(cmd: list[str], repository: str, mock_server: str):
+    del cmd[-1]  # we want it to be interactive
+    changeset = execute_command(
+        cmd
+        + [
+            "commit",
+            "--editor",
+            "touch",
+            "--api-url",
+            mock_server,
+            "--model",
+            API_MODEL,
+            "--api-key",
+            API_KEY_TOKEN,
+        ],
+        abort_on_error=True,
+        valid_codes=[0, 256 + ErrorHandler.EMPTY_MESSAGE],
+        cwd=repository,
+    )
+    assert changeset is None
 
 
 if __name__ == "__main__":

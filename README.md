@@ -1,12 +1,15 @@
 # git-llm-utils
 
-Git hooks powered by LLMs: automatically generate meaningful commit messages based on your changes.
+Git llm message tools powered by LLMs automatically generates meaningful commit messages based on your changes.
 
 ## What it does
 
-- Uses a Git hook (e.g. [`prepare-commit-msg`](prepare-commit-msg.sample)) to capture the staged diff.
-- Sends the diff to a configured LLM such as a model in ollama or groq.
-- Inserts the summary of your changes as your commit message — ready to review or modify.
+- Allows generating git commit messages from the repository staged changes
+- The commnit message can be generated with:
+    - the standard git message workflow with a Git hook to capture your staged changes diff (the hook can be installed with a command).
+    - with a commit command: `git-llm-utils commit`
+- The diff message is generated with the configured llm (groq, ollama or any [Litellm](https://models.litellm.ai/) supported model)
+- All configurations are stored using git config storage support
 - Helps you maintain clean, consistent, human-readable commit history without manual effort.
 
 ## Why use it
@@ -24,54 +27,50 @@ Git hooks powered by LLMs: automatically generate meaningful commit messages bas
 ```bash
 git clone git@github.com:pilardi/git-llm-utils.git
 ```
-2. Make a copy of the [prepare commit hook](./prepare-commit-msg.sample) into `path/to/git-llm-utils/prepare-commit-msg`
+2. Build the environment (you'll need uv package manager installed in your system)
 ```bash
-cp path/to/git-llm-utils/prepare-commit-msg.sample path/to/git-llm-utils/prepare-commit-msg
+cd git-llm-utils && make install
 ```
-3. Update `path/to/git-llm-utils` in the `path/to/git-llm-utils/prepare-commit-msg` file with the directory where you cloned the repo
-4. Configure Git to use the hook:
+3. Activate the environment and build the binary in your system
 ```bash
-git config core.hooksPath path/to/git-llm-utils/prepare-commit-msg
+source .venv/bin/activate && make dist/git-llm-utils
 ```
-5. Ensure your environment (or config) provides credentials or access to a suitable LLM (see [Configuration](#configuration))
-6. Run: 
+4. Ensure your environment (or config) provides credentials to access a suitable LLM (see [Configuration](#configuration))
 ```bash
-uv --directory path/to/git-llm-utils run git-llm-utils status
-``` 
-to see the generated message
-7. Create an alias to generate the message on demand: 
-```bash
-git config --global alias.llmc '!GIT_LLM_ON=True git commit'
-git llmc
+git-llm-utils verify
 ```
-8. Conversly, disable manual mode and use regular `git commit` to get an LLM message generated on every commit, ie:
+5. Go to a repository where you want to use the tool and stage some changes
 ```bash
-uv --directory path/to/git-llm-utils run git-llm-utils set-config manual --value False
-git commit
+cd _your_repository_path_here_ && git-llm-utils status
 ```
+6. Commit the changes with the generated message: (all actions need to be confirmed by the user unless you pass the `--no-confirm` option before the action)
+```bash
+git-llm-utils commit
+```
+
 ### Using the binary
 
-TODO
+You can use the binary distribution located in dist/git-llm-utils or in the github release artifacts, you only need to add it your `PATH`
 
 ## Usage
 
 See:
 
 ```bash
-uv --directory path/to/git-llm-utils run git-llm-utils --help
+git-llm-utils --help
 ```
 
 ## Configuration:
 See:
 
 ```bash
-uv --directory path/to/git-llm-utils run git-llm-utils get-config --help
+git-llm-utils --config
 ```
 
-by default the application uses `ollama/qwen3-coder:480b-cloud` as the model, therefor you'd need to have [ollama](https://ollama.com/download) running in your machine or configure a host where ollama would be running (using `api_url`)
+by default the application uses `ollama/qwen3-coder:480b-cloud` as the model, therefore you'd need to have [ollama](https://ollama.com/download) running in your machine or configure a host where ollama would be running (using `api_url`)
 
 ### Settings
-All configurations are made using git config settings:
+All configuration settings are made using git config settings:
 
 - `emojis`: `True` will allow the llm to generate Emojis in the commit message
 - `comments`: `True` will generate the message with commented lines
@@ -80,12 +79,12 @@ All configurations are made using git config settings:
 - `api_url`: None (will use Litellm defaults, for ollama it's `http://127.0.0.1:11434`)
 - `description_file`: `README.md` will use this file for context to the llm as as tool (if allowed)
 - `use_tools`: `False` will allow the LLM to access the description of your repository
-- `manual`: `True` if True will not generate the commit message for every commit, unless the env `GIT_LLM_ON=True` is set
+- `manual`: `True` if True will not generate the commit message for every git commit when the commit hook is installed, unless the env `GIT_LLM_ON=True` is set
 
 Use:
 
 ```bash
-uv --directory path/to/git-llm-utils run git-llm-utils set-config setting --value value 
+git-llm-utils set-config setting --value value
 ```
 to change the setting, where *setting* is any of the available [settings](#settings)
 

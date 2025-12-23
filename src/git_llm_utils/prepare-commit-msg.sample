@@ -1,7 +1,0 @@
-#!/bin/bash
-COMMIT_MSG_FILE=$1
-COMMIT_SOURCE=$2
-SHA1=$3
-GIT_LLM_REPO=$(git rev-parse --show-toplevel)
-
-path/to/git-llm-utils --repository $GIT_LLM_REPO generate > $COMMIT_MSG_FILE.llm && cat - $COMMIT_MSG_FILE >> $COMMIT_MSG_FILE.llm && mv $COMMIT_MSG_FILE.llm $COMMIT_MSG_FILE

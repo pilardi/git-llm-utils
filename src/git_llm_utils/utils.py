@@ -22,6 +22,9 @@ class ErrorHandler:
     INVALID_HOOK_TEMPLATE = -5
     INVALID_SCOPE = -6
     UNDEFINED_ERROR = -7
+    VERIFICATION_FAILED = -8
+    COMMAND_FAILED = -9
+    EMPTY_MESSAGE = -10
 
     GIT_LLM_DEBUG = "GIT_LLM_DEBUG"
     debug = _bool(os.environ.get(GIT_LLM_DEBUG))
@@ -86,13 +89,19 @@ def execute_command(
     except subprocess.CalledProcessError as e:
         if e.returncode not in valid_codes:
             if abort_on_error:
-                raise Exception(f"Failed to execute command: {command}", e)
-            ErrorHandler.report_error(f"Failed to execute command: {command} -> {e}")
+                raise Exception(
+                    f"Failed to execute command (status:{e.returncode}): {command}", e
+                )
+            ErrorHandler.report_error(
+                f"Failed to execute command (status:{e.returncode}): {command} -> {e}"
+            )
     return None
 
 
 def execute_raw_command(
-    command: Union[list[str], str], input: Any | None, cwd: Optional[str | Path] = None
+    command: Union[list[str], str],
+    input: Any | None = None,
+    cwd: Optional[str | Path] = None,
 ):
     ErrorHandler.report_debug(f"Will run raw command: {command}")
     subprocess.run(

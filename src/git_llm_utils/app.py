@@ -14,6 +14,7 @@ from git_llm_utils.git import (
     get_config as _get_config,
     get_staged_changes,
     get_repository_path,
+    request_message_edit,
     set_config as _set_config,
     unset_config,
     Scope,
@@ -24,6 +25,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
+from rich.markdown import Markdown
 from typing import Any, Callable, Optional, TextIO, Tuple
 
 
@@ -35,7 +37,7 @@ COMMIT_ALIAS = "llmc"
 COMMIT_ALIAS_GIT_COMMAND = f"!{OVERRIDE}=True git commit"
 COMMIT_COMMAND = ["git", "commit", "-F", "-"]
 MESSAGE_HOOK = "prepare-commit-msg"
-MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.sample"
+MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.template"
 NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git commit -a")'
 
 
@@ -170,6 +172,12 @@ class Setting(Enum):
         enum.option = option  # type: ignore
         return enum
 
+    EDITOR = Runtime.load_setting(
+        "editor",
+        factory=None,
+        hint="if --confirm mode is on, will launch this editor to update the message before executing the command / commit",
+        envvar="GIT_EDITOR",
+    )
     EMOJIS = Runtime.load_setting(
         "emojis",
         factory=True,
@@ -251,6 +259,7 @@ def description(
 def command(
     args: list[str],
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
@@ -258,11 +267,12 @@ def command(
     api_url: str | None | None = Setting.API_URL.option,  # type: ignore
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
     tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    editor: str | None = Setting.EDITOR.option,  # type: ignore
 ):
     output = StringIO()
-    generated = generate(
+    generated = _message(
         with_emojis=with_emojis,
-        with_comments=False,
+        with_comments=with_comments,
         model=model,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
@@ -270,15 +280,23 @@ def command(
         api_url=api_url,
         description_file=description_file,
         tools=tools,
-        manual=False,
         output=output,
     )
     value = output.getvalue()
     if generated:
-        _confirm(f"\n{value}\n{' '.join(args)}")
+        editor = Runtime.get_value(Setting.EDITOR.value, editor)  # type: ignore
+        if editor is None or not Runtime.confirm:
+            _confirm(f"\n{value}\n{' '.join(args)}")
+        else:
+            value = request_message_edit(message=value, editor=editor)
+            if value is None:
+                print("Aborting commit due to empty commit message.")
+                raise typer.Exit(ErrorHandler.EMPTY_MESSAGE)
+
         execute_raw_command(args, input=value)
     else:
         print(value)
+        raise typer.Exit(ErrorHandler.COMMAND_FAILED)
 
 
 @app.command(
@@ -286,6 +304,7 @@ def command(
 )
 def commit(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
@@ -293,17 +312,20 @@ def commit(
     api_url: str | None | None = Setting.API_URL.option,  # type: ignore
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
     tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    editor: str | None = Setting.EDITOR.option,  # type: ignore
 ):
     command(
         COMMIT_COMMAND,
-        with_emojis,
-        model,
-        max_input_tokens,
-        max_output_tokens,
-        api_key,
-        api_url,
-        description_file,
-        tools,
+        with_emojis=with_emojis,
+        with_comments=with_comments,
+        model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        api_key=api_key,
+        api_url=api_url,
+        description_file=description_file,
+        tools=tools,
+        editor=editor,
     )
 
 
@@ -318,7 +340,7 @@ def status(
     description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
     tools: bool | None = Setting.TOOLS.option,  # type: ignore
 ):
-    generate(
+    res = _message(
         with_emojis=with_emojis,
         with_comments=False,
         model=model,
@@ -328,9 +350,47 @@ def status(
         api_url=api_url,
         description_file=description_file,
         tools=tools,
-        manual=False,
         output=sys.stdout,
     )
+    if res:
+        print()
+
+
+@app.command(help="Verifies the configuration allows accessing the llm")
+def verify(
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+):
+    res = _message(
+        with_emojis=with_emojis,
+        with_comments=False,
+        model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        api_key=api_key,
+        api_url=api_url,
+        description_file=description_file,
+        tools=tools,
+        output=sys.stdout,
+        get_changes=lambda _: """diff --git a/Readme.md b/Readme.md
+new file mode 100644
+index 0000000..dbd8798
+--- /dev/null
++++ b/Readme.md
+@@ -0,0 +1,2 @@
++# GIT LLM Utils
++Verified
+""",
+    )
+    if not res:
+        raise typer.Exit(ErrorHandler.VERIFICATION_FAILED)
+    print()
 
 
 @app.command(
@@ -361,7 +421,36 @@ def generate(
         ErrorHandler.report_debug(f"requested manual {manual} but override was not set")
         return False
 
-    changes = get_staged_changes(repository=Runtime.repository)
+    return _message(
+        with_emojis=with_emojis,
+        with_comments=with_comments,
+        model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        api_key=api_key,
+        api_url=api_url,
+        description_file=description_file,
+        tools=tools,
+        output=output,
+    )
+
+
+def _message(
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    api_key: str | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    output: TextIO = typer.Option(
+        hidden=True, parser=lambda _: sys.stdout, default=sys.stdout
+    ),
+    get_changes: Callable[[Optional[Path]], Optional[str]] = get_staged_changes,
+) -> bool:
+    changes = get_changes(Runtime.repository)
     if changes is None or not changes.strip():
         print(NO_CHANGES_MESSAGE, file=output)
         return False
@@ -467,6 +556,12 @@ def _show_version(show: bool):
 def _show_config(show: bool):
     if show:
         console = Console()
+        t = Markdown("""
+- Use `git-llm-utils get-config <SETTING>` to read specific settings
+- Use `git-llm-utils set-config <SETTING> --value <VALUE>` to change specific settings
+By default all settings are scoped to the current respository, but you can change the scope with the `--scope <SCOPE>` parameter
+""")
+        console.print(t)
         table = Table("Setting", "Factory", "Default", "Description")
         for setting in Setting:
             table.add_row(

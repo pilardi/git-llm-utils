@@ -1,11 +1,13 @@
 from enum import Enum
 from pathlib import Path
-from git_llm_utils.utils import execute_command
-from typing import Optional
+from git_llm_utils.utils import execute_command, execute_raw_command, ErrorHandler
+from typing import Optional, Tuple
 
 import sys
+import tempfile
 
 _VALID_EXIT_CODES = [0]
+COMMIT_MESSAGE_TEMPLATE = "commit-msg.template"
 
 
 class Scope(Enum):
@@ -110,3 +112,47 @@ def get_repository_path(
         sys.exit(-1)
 
     return repository_path and Path(str(repository_path).strip()) or None
+
+
+def get_repository_changes(
+    repository: Optional[str | Path] = None, abort_on_error: bool = True
+) -> Tuple[str | None, str | None]:
+    branch = execute_command(["git", "branch", "--show-current"], cwd=repository)
+    changeset = execute_command(["git", "status", "--porcelain"], cwd=repository)
+    return branch, changeset
+
+
+def request_message_edit(
+    message: str,
+    editor: str,
+    repository: Optional[str | Path] = None,
+    abort_on_error: bool = True,
+) -> str | None:
+    file = tempfile.NamedTemporaryFile()
+    file.write("\n".encode())
+    file.write(message.encode())
+    (branch, changeset) = get_repository_changes(
+        repository=repository, abort_on_error=abort_on_error
+    )
+    if branch is not None and changeset is not None:
+        branch = branch.strip()
+        commit_msg_template_path = (Path.cwd() / __file__).with_name(
+            COMMIT_MESSAGE_TEMPLATE
+        )
+        for line in open(commit_msg_template_path):
+            file.write(line.replace("{BRANCH}", branch).encode())
+        for change in changeset.split("\n"):
+            file.write(f"# \t{change}\n".encode())
+        file.flush()
+        execute_raw_command([editor, file.name])
+        file.seek(0)
+        lines = [
+            s_line
+            for line in file.readlines()
+            if not (s_line := line.decode().strip()).startswith("#") and len(s_line) > 0
+        ]
+        ErrorHandler.report_debug(f"message update lines are: {lines}")
+        if len(lines) > 0:
+            return "\n".join(lines)
+
+    return None
