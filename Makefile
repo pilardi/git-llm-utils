@@ -17,9 +17,6 @@ check-code:
 check: check-formatting check-code
 	@echo "Code verification complete"
 
-verify: check tests
-	@echo "Verification complete"
-
 install:
 	@echo "Installing dependencies ..."
 	uv sync --locked --all-extras --dev
@@ -39,6 +36,9 @@ dist/git-llm-utils: install
 tests:
 	@echo "== Running python tests =="
 	uv run pytest ${PY_TESTS_FLAGS} -m "not integration"
+
+verify: check tests
+	@echo "Verification complete"
 
 tests/src: dist
 	@echo "== Running python tests over source dist =="

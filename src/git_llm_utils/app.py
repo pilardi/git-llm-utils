@@ -24,7 +24,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
-from typing import Any, Callable, Optional, TextIO, Tuple, Union
+from typing import Any, Callable, Optional, TextIO, Tuple
 
 
 import sys
