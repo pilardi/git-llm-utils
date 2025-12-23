@@ -1,5 +1,5 @@
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, Optional, Union
 
 import git_llm_utils
 import os
@@ -65,7 +65,7 @@ def execute_background_command(
 
 
 def execute_command(
-    command: list[str],
+    command: Union[list[str], str],
     abort_on_error: bool = True,
     cwd: Optional[str | Path] = None,
     valid_codes: Iterable[int] = [0],
@@ -89,6 +89,23 @@ def execute_command(
                 raise Exception(f"Failed to execute command: {command}", e)
             ErrorHandler.report_error(f"Failed to execute command: {command} -> {e}")
     return None
+
+
+def execute_raw_command(
+    command: Union[list[str], str], input: Any | None, cwd: Optional[str | Path] = None
+):
+    ErrorHandler.report_debug(f"Will run raw command: {command}")
+    subprocess.run(
+        command,
+        capture_output=False,
+        text=True,
+        check=True,
+        creationflags=subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0,
+        encoding="utf-8",
+        errors="replace",
+        cwd=cwd,
+        input=input,
+    )
 
 
 def get_tomlib_project() -> Dict:

@@ -528,6 +528,16 @@ def test_auto_hook_commit_messages(cmd: list[str], repository: str, mock_server:
     assert status == cli_message.rstrip()
 
 
+@pytest.mark.integration
+def test_command(cmd: list[str], repository: str, mock_server: str):
+    pass  # TODO add command test
+
+
+@pytest.mark.integration
+def test_commit(cmd: list[str], repository: str, mock_server: str):
+    pass  # TODO add commit test
+
+
 if __name__ == "__main__":
     print("Starting mock server")
     _start_mock_server(

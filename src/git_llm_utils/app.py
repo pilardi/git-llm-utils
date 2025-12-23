@@ -1,4 +1,5 @@
 from enum import Enum
+from io import StringIO
 from git_llm_utils.utils import (
     _bool,
     get_tomlib_project,
@@ -6,6 +7,7 @@ from git_llm_utils.utils import (
     read_file,
     write_file,
     execute_command,
+    execute_raw_command,
     ErrorHandler,
 )
 from git_llm_utils.git import (
@@ -22,7 +24,7 @@ from pathlib import Path
 from pydantic import BaseModel
 from rich.console import Console
 from rich.table import Table
-from typing import Any, Callable, Optional, TextIO, Tuple
+from typing import Any, Callable, Optional, TextIO, Tuple, Union
 
 
 import sys
@@ -31,6 +33,7 @@ import typer
 OVERRIDE = "GIT_LLM_ON"
 COMMIT_ALIAS = "llmc"
 COMMIT_ALIAS_GIT_COMMAND = f"!{OVERRIDE}=True git commit"
+COMMIT_COMMAND = ["git", "commit", "-F", "-"]
 MESSAGE_HOOK = "prepare-commit-msg"
 MESSAGE_HOOK_TEMPLATE = f"{MESSAGE_HOOK}.sample"
 NO_CHANGES_MESSAGE = 'no changes added to commit (use "git add" and/or "git commit -a")'
@@ -242,6 +245,68 @@ def description(
     print(read_file(file_path=Path(Runtime.repository or ".", description_file)))
 
 
+@app.command(
+    help=f"Passes the status output as input to the given command arguments, as in `git-llm-utils command -- {' '.join(COMMIT_COMMAND)}`"
+)
+def command(
+    args: list[str],
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+):
+    output = StringIO()
+    generated = generate(
+        with_emojis=with_emojis,
+        with_comments=False,
+        model=model,
+        max_input_tokens=max_input_tokens,
+        max_output_tokens=max_output_tokens,
+        api_key=api_key,
+        api_url=api_url,
+        description_file=description_file,
+        tools=tools,
+        manual=False,
+        output=output,
+    )
+    value = output.getvalue()
+    if generated:
+        _confirm(f"\n{value}\n{' '.join(args)}")
+        execute_raw_command(args, input=value)
+    else:
+        print(value)
+
+
+@app.command(
+    help=f"commit the current change set using the status message using `{' '.join(COMMIT_COMMAND)}`"
+)
+def commit(
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+):
+    command(
+        COMMIT_COMMAND,
+        with_emojis,
+        model,
+        max_input_tokens,
+        max_output_tokens,
+        api_key,
+        api_url,
+        description_file,
+        tools,
+    )
+
+
 @app.command(help="Generates a status message based on the git staged changes")
 def status(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
@@ -285,56 +350,54 @@ def generate(
     manual_override: bool = typer.Option(
         None,
         "--override",
-        envvar="GIT_LLM_ON",
+        envvar=OVERRIDE,
         hidden=True,
     ),
     output: TextIO = typer.Option(
         hidden=True, parser=lambda _: sys.stdout, default=sys.stdout
     ),
-):
+) -> bool:
     if Runtime.get_value(Setting.MANUAL.value, manual) and not manual_override:
         ErrorHandler.report_debug(f"requested manual {manual} but override was not set")
-        return
+        return False
 
     changes = get_staged_changes(repository=Runtime.repository)
-    if changes:
-        file_path = (
-            description_file
-            and Path(Runtime.repository or ".", description_file)
-            or None
-        )
-        client = LLMClient(
-            use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
-            model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
-            max_tokens=Runtime.get_value(
-                Setting.MAX_INPUT_TOKENS.value, max_input_tokens
-            ),  # type: ignore
-            max_output_tokens=Runtime.get_value(
-                Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
-            ),  # type: ignore
-            api_key=Runtime.get_value(Setting.API_KEY.value, api_key),
-            api_url=Runtime.get_value(Setting.API_URL.value, api_url),
-            use_tools=Runtime.get_value(Setting.TOOLS.value, tools)
-            and file_path is not None
-            and file_path.exists(),  # type: ignore
-            respository_description=lambda: read_file(file_path),  # type: ignore
-        )
-        comments = Runtime.get_value(Setting.COMMENTS.value, with_comments)
-
-        commented = False
-        for message in client.message(changes, stream=False):
-            if comments:
-                for c in message:
-                    if not commented:
-                        print("# ", end="", file=output)
-                        commented = True
-                    print(c, end="", file=output)
-                    if c == "\n":
-                        commented = False
-            else:
-                print(message, end="", file=output)
-    else:
+    if changes is None or not changes.strip():
         print(NO_CHANGES_MESSAGE, file=output)
+        return False
+
+    file_path = (
+        description_file and Path(Runtime.repository or ".", description_file) or None
+    )
+    client = LLMClient(
+        use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
+        model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
+        max_tokens=Runtime.get_value(Setting.MAX_INPUT_TOKENS.value, max_input_tokens),  # type: ignore
+        max_output_tokens=Runtime.get_value(
+            Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
+        ),  # type: ignore
+        api_key=Runtime.get_value(Setting.API_KEY.value, api_key),
+        api_url=Runtime.get_value(Setting.API_URL.value, api_url),
+        use_tools=Runtime.get_value(Setting.TOOLS.value, tools)
+        and file_path is not None
+        and file_path.exists(),  # type: ignore
+        respository_description=lambda: read_file(file_path),  # type: ignore
+    )
+    comments = Runtime.get_value(Setting.COMMENTS.value, with_comments)
+
+    commented = False
+    for message in client.message(changes, stream=False):
+        if comments:
+            for c in message:
+                if not commented:
+                    print("# ", end="", file=output)
+                    commented = True
+                print(c, end="", file=output)
+                if c == "\n":
+                    commented = False
+        else:
+            print(message, end="", file=output)
+    return True
 
 
 @app.command(help="Reads the configuration value")
