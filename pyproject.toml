@@ -12,7 +12,7 @@ dependencies = [
     "lock>=2018.3.25.2110",
     "pydantic>=2.12.4",
     "pyreadline3>=3.5.4",
-    "typer<=0.18.0",
+    "typer>=0.20.1",
 ]
 
 [project.urls]
