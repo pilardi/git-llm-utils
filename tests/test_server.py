@@ -411,7 +411,7 @@ def _install(
     cmd,
     repository,
     mock_server,
-    alias: str = COMMIT_ALIAS_GIT_COMMAND,
+    alias: str = COMMIT_ALIAS,
     auth_token: str = API_KEY_TOKEN,
     model: str = API_MODEL,
 ):
