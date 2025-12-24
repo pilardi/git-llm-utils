@@ -25,11 +25,11 @@ jobs:
         os: [ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Setup git user
         run: |
-            git config --global user.name "$(git --no-pager log --format=format:'%an' -n 1)"
-            git config --global user.email "$(git --no-pager log --format=format:'%ae' -n 1)"
+            git config --global user.name "github-actions[bot]"
+            git config --global user.email "8808211+pilardi@users.noreply.github.com"
       - name: Install uv
         uses: astral-sh/setup-uv@v7
         with:
