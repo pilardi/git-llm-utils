@@ -42,7 +42,7 @@ jobs:
       - name: Upload
         uses: actions/upload-artifact@v4
         with:
-          name: git-llm-utils-${{ matrix.os }}-${{ matrix.version }}
+          name: git-llm-utils-${RUNNER_OS:-${{ matrix.os }}}-${RUNNER_ARCH:-default}.gz
           compression-level: 7
           path: dist/git-llm-utils
 
