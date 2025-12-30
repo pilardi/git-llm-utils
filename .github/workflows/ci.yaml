@@ -6,11 +6,14 @@ on:
     branches:
       - main
       - v**
+    tags:
+      - "v**"
 
 jobs:
   source:
     name: Source Verification
     runs-on: ubuntu-latest
+    if: github.ref_type != 'tag'
     steps:
       - uses: actions/checkout@v5
       - name: Install uv
@@ -18,7 +21,7 @@ jobs:
       - name: Verifying source code
         run: make check
 
-  test:
+  build:
     name: Tests
     strategy:
       matrix:
@@ -39,10 +42,22 @@ jobs:
         run: make tests
       - name: Running Binary Tests
         run: make tests/dist/git-llm-utils
+      - name: Generate Artifact Name
+        run: |
+          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }} &&
+          ARTIFACT="dist/${ARTIFACT_NAME,,}"" &&
+          mv dist/git-llm-utils ${ARTIFACT} &&
+          echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_ENV
       - name: Upload
+        if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
-          name: git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }}
+          name: ${{ env.ARTIFACT }}
           compression-level: 7
           path: dist/git-llm-utils
+      - name: Release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: ${{ env.ARTIFACT }}
 
