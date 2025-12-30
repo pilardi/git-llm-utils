@@ -22,7 +22,7 @@ jobs:
         run: make check
 
   build:
-    name: Tests
+    name: Build
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -38,24 +38,24 @@ jobs:
         with:
           activate-environment: true
           python-version: 3.11
-      - name: Running tests
+      - name: Running unit tests
         run: make tests
-      - name: Running Binary Tests
+      - name: Running integration tests
         run: make tests/dist/git-llm-utils
       - name: Generate Artifact Name
         run: |
-          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }} &&
-          ARTIFACT="dist/${ARTIFACT_NAME,,}"" &&
+          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }}" &&
+          ARTIFACT="dist/${ARTIFACT_NAME,,}" &&
           mv dist/git-llm-utils ${ARTIFACT} &&
           echo "ARTIFACT=${ARTIFACT}" >> $GITHUB_ENV
-      - name: Upload
+      - name: Uploading Build Artifacts
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ env.ARTIFACT }}
           compression-level: 7
           path: dist/git-llm-utils
-      - name: Release
+      - name: Uploading Release Artifacts
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
