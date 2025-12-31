@@ -13,64 +13,72 @@ permissions:
   contents: write # https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#update-a-release
 
 jobs:
-  source:
+  verify:
     name: Source Verification
     runs-on: ubuntu-latest
     if: github.ref_type != 'tag'
     steps:
-      - uses: actions/checkout@v5
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Setup
+        uses: ./.github/actions/setup
       - name: Verifying source code
         run: make check
 
   build:
     name: Build
+    if: github.ref_type != 'tag'
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python: ["3.11"]
+        python: [3.11]
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v6
       - name: Setup git user
-        if: github.ref_type != 'tag'
         run: |
             git config --global user.name "github-actions[bot]"
             git config --global user.email "8808211+pilardi@users.noreply.github.com"
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
-          activate-environment: true
-          python-version: ${{ matrix.python }}
+          python: ${{ matrix.python }}
       - name: Build
         run: make dist/git-llm-utils
       - name: Run unit tests
-        if: github.ref_type != 'tag'
         run: make tests
       - name: Run integration tests
-        if: github.ref_type != 'tag'
         run: make tests/dist/git-llm-utils
-      - name: Generate Artifact Name
-        shell: bash
-        run: |
-          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }}"
-          ARTIFACT_NAME="${ARTIFACT_NAME,,}"
-          ARTIFACT="dist/${ARTIFACT_NAME}"
-          mv dist/git-llm-utils ${ARTIFACT}
-          gzip ${ARTIFACT}
-          echo "ARTIFACT=${ARTIFACT}.gz" >> $GITHUB_ENV
-          echo "ARTIFACT_NAME=${ARTIFACT_NAME}.gz" >> $GITHUB_ENV
-      - name: Upload Build Artifacts
-        if: github.ref_type != 'tag'
+      - name: Prepare Artifacts
+        uses: ./.github/actions/artifacts
+        with:
+          os: ${{ runner.os || matrix.os }}
+          arch: ${{ runner.arch || 'default' }}
+      - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
           compression-level: 0
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT }}
-      - name: Upload Release Artifacts
-        if: github.ref_type == 'tag'
+
+  release:
+    name: Release
+    if: github.ref_type == 'tag'
+    strategy:
+      matrix:
+        os: [ubuntu-latest, ubuntu-24.04-arm, windows-latest, macos-15-intel, macos-latest ]
+        python: [3.11]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          python: ${{ matrix.python }}
+      - name: Build
+        run: make dist/git-llm-utils
+      - name: Prepare Artifacts
+        uses: ./.github/actions/artifacts
+        with:
+          os: ${{ runner.os || matrix.os }}
+          arch: ${{ runner.arch || 'default' }}
+      - name: Upload Artifacts
         uses: softprops/action-gh-release@v2
         with:
           files: ${{ env.ARTIFACT }}
-

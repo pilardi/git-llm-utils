@@ -1,0 +1,21 @@
+name: Prepare Artifacts
+description: "Prepares the binary artifacts for uploading"
+inputs:
+  os:
+    description: "the os name for the artifact, as in: linux"
+    default: "default"
+  arch:
+    description: "the artifact architecture, as in x64"
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare Artifacts
+      shell: bash
+      run: |
+        ARTIFACT_NAME="git-llm-utils-${{ inputs.os }}-${{ inputs.arch }}"
+        ARTIFACT_NAME="${ARTIFACT_NAME,,}"
+        ARTIFACT="dist/${ARTIFACT_NAME}"
+        mv dist/git-llm-utils ${ARTIFACT}
+        gzip ${ARTIFACT}
+        echo "ARTIFACT=${ARTIFACT}.gz" >> $GITHUB_ENV
+        echo "ARTIFACT_NAME=${ARTIFACT_NAME}.gz" >> $GITHUB_ENV
