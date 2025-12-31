@@ -18,12 +18,14 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref_type != 'tag'
     steps:
+      - uses: actions/checkout@v6
       - name: Setup
         uses: ./.github/actions/setup
       - name: Verifying source code
         run: make check
 
   build:
+    needs: verify
     name: Build
     if: github.ref_type != 'tag'
     strategy:
@@ -32,6 +34,7 @@ jobs:
         python: [3.11]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v6
       - name: Setup git user
         run: |
             git config --global user.name "github-actions[bot]"
@@ -67,6 +70,7 @@ jobs:
         python: [3.11]
     runs-on: ${{ matrix.os }}
     steps:
+      - uses: actions/checkout@v6
       - name: Setup
         uses: ./.github/actions/setup
         with:
