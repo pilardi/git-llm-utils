@@ -9,6 +9,9 @@ on:
     tags:
       - "v**"
 
+permissions:
+  contents: write # https://docs.github.com/en/rest/releases/releases?apiVersion=2022-11-28#update-a-release
+
 jobs:
   source:
     name: Source Verification
@@ -26,10 +29,12 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
+        python: ["3.11"]
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v6
       - name: Setup git user
+        if: github.ref_type != 'tag'
         run: |
             git config --global user.name "github-actions[bot]"
             git config --global user.email "8808211+pilardi@users.noreply.github.com"
@@ -37,10 +42,14 @@ jobs:
         uses: astral-sh/setup-uv@v7
         with:
           activate-environment: true
-          python-version: 3.11
+          python-version: ${{ matrix.python }}
+      - name: Build
+        run: make dist/git-llm-utils
       - name: Run unit tests
+        if: github.ref_type != 'tag'
         run: make tests
       - name: Run integration tests
+        if: github.ref_type != 'tag'
         run: make tests/dist/git-llm-utils
       - name: Generate Artifact Name
         shell: bash
