@@ -38,26 +38,28 @@ jobs:
         with:
           activate-environment: true
           python-version: 3.11
-      - name: Running unit tests
+      - name: Run unit tests
         run: make tests
-      - name: Running integration tests
+      - name: Run integration tests
         run: make tests/dist/git-llm-utils
       - name: Generate Artifact Name
+        shell: bash
         run: |
-          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }}" &&
-          ARTIFACT="dist/${ARTIFACT_NAME,,}" &&
-          mv dist/git-llm-utils ${ARTIFACT} &&
-          gzip ${ARTIFACT} &&
-          echo "ARTIFACT=${ARTIFACT}.gz" >> $GITHUB_ENV &&
+          ARTIFACT_NAME="git-llm-utils-${{ runner.os || matrix.os }}-${{ runner.arch || 'default' }}"
+          ARTIFACT_NAME="${ARTIFACT_NAME,,}"
+          ARTIFACT="dist/${ARTIFACT_NAME}"
+          mv dist/git-llm-utils ${ARTIFACT}
+          gzip ${ARTIFACT}
+          echo "ARTIFACT=${ARTIFACT}.gz" >> $GITHUB_ENV
           echo "ARTIFACT_NAME=${ARTIFACT_NAME}.gz" >> $GITHUB_ENV
-      - name: Uploading Build Artifacts
+      - name: Upload Build Artifacts
         if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           compression-level: 0
           name: ${{ env.ARTIFACT_NAME }}
           path: ${{ env.ARTIFACT }}
-      - name: Uploading Release Artifacts
+      - name: Upload Release Artifacts
         if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
