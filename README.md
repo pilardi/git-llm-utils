@@ -50,7 +50,13 @@ git-llm-utils commit
 
 ### Using the binary
 
-You can use the binary distribution located in dist/git-llm-utils or in the github release artifacts, you only need to add it your `PATH`.
+You can download the binary version correspoding to your OS from the release [assets](https://github.com/pilardi/git-llm-utils/releases) or build it locally using:
+
+```bash
+make dist/git-llm-utils
+```
+
+You'd only need to add it your local `PATH` afterwards.
 
 ## Usage
 
