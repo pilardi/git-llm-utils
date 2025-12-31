@@ -15,6 +15,6 @@ runs:
         ARTIFACT_NAME="git-llm-utils-${{ inputs.os }}-${{ inputs.arch }}"
         ARTIFACT_NAME=$(tr '[:upper:]' '[:lower:]' <<< "$ARTIFACT_NAME")
         cd dist
-        zip -9 ${ARTIFACT} git-llm-utils*
+        zip -9 -r ${ARTIFACT_NAME} .
         echo "ARTIFACT=dist/${ARTIFACT}.zip" >> $GITHUB_ENV
         echo "ARTIFACT_NAME=${ARTIFACT_NAME}.zip" >> $GITHUB_ENV
