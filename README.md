@@ -1,15 +1,15 @@
 # git-llm-utils
 
-Git llm message tools powered by LLMs automatically generates meaningful commit messages based on your changes.
+`git-llm-utils` enables automatically generating meaningful commit messages based on your staged changes using a LLM.
 
 ## What it does
 
-- Allows generating git commit messages from the repository staged changes
+- Allows generating git commit messages from the repository staged changes.
 - The commnit message can be generated with:
     - the standard git message workflow with a Git hook to capture your staged changes diff (the hook can be installed with a command).
     - with a commit command: `git-llm-utils commit`
-- The diff message is generated with the configured llm (groq, ollama or any [Litellm](https://models.litellm.ai/) supported model)
-- All configurations are stored using git config storage support
+- The diff message is generated with the configured llm (groq, ollama or any [Litellm](https://models.litellm.ai/) supported model).
+- All configurations are stored using git config storage support.
 - Helps you maintain clean, consistent, human-readable commit history without manual effort.
 
 ## Why use it
@@ -50,7 +50,7 @@ git-llm-utils commit
 
 ### Using the binary
 
-You can use the binary distribution located in dist/git-llm-utils or in the github release artifacts, you only need to add it your `PATH`
+You can use the binary distribution located in dist/git-llm-utils or in the github release artifacts, you only need to add it your `PATH`.
 
 ## Usage
 
@@ -67,30 +67,50 @@ See:
 git-llm-utils --config
 ```
 
-by default the application uses `ollama/qwen3-coder:480b-cloud` as the model, therefore you'd need to have [ollama](https://ollama.com/download) running in your machine or configure a host where ollama would be running (using `api_url`)
+by default the application uses `ollama/qwen3-coder:480b-cloud` as the model, therefore you'd need to have [ollama](https://ollama.com/download) running in your machine or configure a host where ollama would be running (using `api_url`).
 
 ### Settings
 All configuration settings are made using git config settings:
 
-- `emojis`: `True` will allow the llm to generate Emojis in the commit message
-- `comments`: `True` will generate the message with commented lines
-- `model`: `ollama/qwen3-coder:480b-cloud` use [Litellm](https://models.litellm.ai/) syntaxis
-- `api_key`: None
-- `api_url`: None (will use Litellm defaults, for ollama it's `http://127.0.0.1:11434`)
-- `description_file`: `README.md` will use this file for context to the llm as as tool (if allowed)
-- `use_tools`: `False` will allow the LLM to access the description of your repository
-- `manual`: `True` if True will not generate the commit message for every git commit when the commit hook is installed, unless the env `GIT_LLM_ON=True` is set
+- `emojis`: `True` will allow the llm to generate Emojis in the commit message.
+- `comments`: `True` will generate the message with commented lines.
+- `model`: `ollama/qwen3-coder:480b-cloud` use [Litellm](https://models.litellm.ai/) syntaxis.
+- `reasoning`: `medium` use [Litellm Reasoning](https://docs.litellm.ai/docs/reasoning_content).
+- `max_input_tokens`: how many tokens to send to the model at most (262144).
+- `max_output_tokens`: how many tokens to request form the model at most (32768).
+- `api_key`: `None` if not given, will read env variables according to `Litellm` api provider settings (ie: `OPENAI_API_KEY`).
+- `api_url`: `None` (will use `Litellm` defaults, for ollama it's `http://127.0.0.1:11434`).
+- `description-file`: `README.md` will use this file for context to the llm as as tool (if allowed).
+- `tools`: `False` will allow the LLM to access the description of your repository.
+- `manual`: `True` if `True` will not generate the commit message for every git commit when the commit hook is installed, unless the env.`GIT_LLM_ON=True` is set. Manual mode is active by default as you might want to select which commits needs llm comments.
 
 Use:
 
 ```bash
 git-llm-utils set-config setting --value value
 ```
-to change the setting, where *setting* is any of the available [settings](#settings)
+to change the setting, where *setting* is any of the available [settings](#settings).
+
+### Models
+By default the system uses [`qwen3-coder:480b-cloud`](https://ollama.com/library/qwen3-coder:480b-cloud), however you can try other models such as [`nemotron-3-nano:30b-cloud`](https://ollama.com/library/nemotron-3-nano). ie:
+
+ ```bash
+ollama pull nemotron-3-nano:30b-cloud && git-llm-utils commit --model ollama/nemotron-3-nano:30b-cloud
+```
+Local models are also supported however the quality of the message will drasticall vary based on the size of it (even worse for non-thinking models), ie:
+```bash
+ollama pull deepseek-coder:6.7b && git-llm-utils commit --model ollama/deepseek-coder:6.7b --reasoning none
+```
+
+## References:
+- [Litellm](https://github.com/BerriAI/litellm) is uses as the llm library to connect to your preferred LLM model server.
+- [Typer](https://github.com/fastapi/typer) typer is the cli client library used to wire the application.
+- [Ollama](https://github.com/ollama/ollama) is the default model server, however any litellm model api would work such as openai, groq or gemini.
+- [Git](https://git-scm.com/) is the underlining supported repository, you'd need to have `git` installed in your system to use this tool.
 
 ---
 
-All commit messages in this repo were generated by this tool
+Fun fact, all commit messages in this repo were generated by this tool
 
 ---
 

@@ -195,6 +195,11 @@ class Setting(Enum):
         factory="ollama/qwen3-coder:480b-cloud",
         hint="The model to use (has to be available) according to the LiteLLM provider, as in `ollama/llama2` or `openai/gpt-5-mini`",
     )
+    MODEL_REASONING = Runtime.load_setting(
+        "reasoning",
+        factory="medium",
+        hint="The level of reasoning requested from the model (https://docs.litellm.ai/docs/reasoning_content), use none for non thinking models",
+    )
     MAX_INPUT_TOKENS = Runtime.load_setting(
         "max_input_tokens",
         factory=262144,
@@ -261,6 +266,7 @@ def command(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
@@ -274,6 +280,7 @@ def command(
         with_emojis=with_emojis,
         with_comments=with_comments,
         model=model,
+        reasoning=reasoning,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         api_key=api_key,
@@ -306,6 +313,7 @@ def commit(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
@@ -319,6 +327,7 @@ def commit(
         with_emojis=with_emojis,
         with_comments=with_comments,
         model=model,
+        reasoning=reasoning,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         api_key=api_key,
@@ -333,6 +342,7 @@ def commit(
 def status(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
@@ -344,6 +354,7 @@ def status(
         with_emojis=with_emojis,
         with_comments=False,
         model=model,
+        reasoning=reasoning,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         api_key=api_key,
@@ -360,6 +371,7 @@ def status(
 def verify(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
@@ -371,6 +383,7 @@ def verify(
         with_emojis=with_emojis,
         with_comments=False,
         model=model,
+        reasoning=reasoning,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         api_key=api_key,
@@ -400,6 +413,7 @@ def generate(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
@@ -425,6 +439,7 @@ def generate(
         with_emojis=with_emojis,
         with_comments=with_comments,
         model=model,
+        reasoning=reasoning,
         max_input_tokens=max_input_tokens,
         max_output_tokens=max_output_tokens,
         api_key=api_key,
@@ -439,6 +454,7 @@ def _message(
     with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
     model: str | None = Setting.MODEL.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
     max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
     max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
     api_key: str | None = Setting.API_KEY.option,  # type: ignore
@@ -461,6 +477,9 @@ def _message(
     client = LLMClient(
         use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
         model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
+        model_reasoning=Runtime.get_value(
+            Setting.MODEL_REASONING.value, reasoning
+        ),  # type: ignore
         max_tokens=Runtime.get_value(Setting.MAX_INPUT_TOKENS.value, max_input_tokens),  # type: ignore
         max_output_tokens=Runtime.get_value(
             Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens

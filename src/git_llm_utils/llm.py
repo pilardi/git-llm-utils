@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, Literal, Optional
 from git_llm_utils.utils import ErrorHandler
 
 import json
@@ -277,6 +277,12 @@ class LLMClient(BaseModel):
     model_temperature: float = Field(
         description="How creative we want the response to be, 0 by default", default=0
     )
+    model_reasoning: Optional[
+        Literal["none", "minimal", "low", "medium", "high", "default"]
+    ] = Field(
+        description="Model resoning effort (https://docs.litellm.ai/docs/reasoning_content)",
+        default="medium",
+    )
     api_key: str | None = Field(description="api key", default=None)
     api_url: str | None = Field(description="base llm api", default=None)
     use_tools: bool = Field(
@@ -357,7 +363,7 @@ class LLMClient(BaseModel):
                 api_key=self.api_key,
                 max_tokens=self.max_output_tokens,
                 stream=False,
-                reasoning_effort="medium",
+                reasoning_effort=self.model_reasoning,
                 drop_params=True,  # cross llm provider support
                 temperature=self.model_temperature,
                 verbosity="medium",
