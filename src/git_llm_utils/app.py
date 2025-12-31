@@ -477,9 +477,7 @@ def _message(
     client = LLMClient(
         use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
         model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
-        model_reasoning=Runtime.get_value(
-            Setting.MODEL_REASONING.value, reasoning
-        ),  # type: ignore
+        model_reasoning=Runtime.get_value(Setting.MODEL_REASONING.value, reasoning),  # type: ignore
         max_tokens=Runtime.get_value(Setting.MAX_INPUT_TOKENS.value, max_input_tokens),  # type: ignore
         max_output_tokens=Runtime.get_value(
             Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
