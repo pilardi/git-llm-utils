@@ -158,6 +158,11 @@ class Runtime:
             unset_config(s.key, scope=scope, repository=Runtime.repository)
 
     @staticmethod
+    def set_value(setting: str, given: Any = None):
+        if setting in Runtime.settings:
+            return Runtime.settings[setting][0].set_value(given)
+
+    @staticmethod
     def get_value(setting: str, given: Any = None) -> Optional[Any]:
         if setting in Runtime.settings:
             return Runtime.settings[setting][0].get_value(given)
@@ -252,10 +257,9 @@ app = typer.Typer(
 
 
 @app.command(help="Reads the respository description")
-def description(
-    description_file: str = Setting.DESCRIPTION_FILE.option,  # type: ignore
-) -> Optional[str]:
-    print(read_file(file_path=Path(Runtime.repository or ".", description_file)))
+def description() -> Optional[str]:
+    description_file = Runtime.get_value(Setting.DESCRIPTION_FILE.value)  # type: ignore
+    print(read_file(file_path=Path(Runtime.repository or ".", description_file)))  # type: ignore
 
 
 @app.command(
@@ -263,30 +267,12 @@ def description(
 )
 def command(
     args: list[str],
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
     editor: str | None = Setting.EDITOR.option,  # type: ignore
 ):
     output = StringIO()
     generated = _message(
-        with_emojis=with_emojis,
         with_comments=with_comments,
-        model=model,
-        reasoning=reasoning,
-        max_input_tokens=max_input_tokens,
-        max_output_tokens=max_output_tokens,
-        api_key=api_key,
-        api_url=api_url,
-        description_file=description_file,
-        tools=tools,
         output=output,
     )
     value = output.getvalue()
@@ -310,57 +296,20 @@ def command(
     help=f"commit the current change set using the status message using `{' '.join(COMMIT_COMMAND)}`"
 )
 def commit(
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
     editor: str | None = Setting.EDITOR.option,  # type: ignore
 ):
     command(
         COMMIT_COMMAND,
-        with_emojis=with_emojis,
         with_comments=with_comments,
-        model=model,
-        reasoning=reasoning,
-        max_input_tokens=max_input_tokens,
-        max_output_tokens=max_output_tokens,
-        api_key=api_key,
-        api_url=api_url,
-        description_file=description_file,
-        tools=tools,
         editor=editor,
     )
 
 
 @app.command(help="Generates a status message based on the git staged changes")
-def status(
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
-):
+def status():
     res = _message(
-        with_emojis=with_emojis,
         with_comments=False,
-        model=model,
-        reasoning=reasoning,
-        max_input_tokens=max_input_tokens,
-        max_output_tokens=max_output_tokens,
-        api_key=api_key,
-        api_url=api_url,
-        description_file=description_file,
-        tools=tools,
         output=sys.stdout,
     )
     if res:
@@ -368,28 +317,9 @@ def status(
 
 
 @app.command(help="Verifies the configuration allows accessing the llm")
-def verify(
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
-):
+def verify():
     res = _message(
-        with_emojis=with_emojis,
         with_comments=False,
-        model=model,
-        reasoning=reasoning,
-        max_input_tokens=max_input_tokens,
-        max_output_tokens=max_output_tokens,
-        api_key=api_key,
-        api_url=api_url,
-        description_file=description_file,
-        tools=tools,
         output=sys.stdout,
         get_changes=lambda _: """diff --git a/Readme.md b/Readme.md
 new file mode 100644
@@ -410,16 +340,7 @@ index 0000000..dbd8798
     help=f"Generates a commit message based on the git staged changes for the {MESSAGE_HOOK} hook"
 )
 def generate(
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
     manual: bool | None = Setting.MANUAL.option,  # type: ignore
     manual_override: bool = typer.Option(
         None,
@@ -436,31 +357,13 @@ def generate(
         return False
 
     return _message(
-        with_emojis=with_emojis,
         with_comments=with_comments,
-        model=model,
-        reasoning=reasoning,
-        max_input_tokens=max_input_tokens,
-        max_output_tokens=max_output_tokens,
-        api_key=api_key,
-        api_url=api_url,
-        description_file=description_file,
-        tools=tools,
         output=output,
     )
 
 
 def _message(
-    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
-    with_comments: bool | None = Setting.COMMENTS.option,  # type: ignore
-    model: str | None = Setting.MODEL.option,  # type: ignore
-    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
-    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
-    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
-    api_key: str | None = Setting.API_KEY.option,  # type: ignore
-    api_url: str | None = Setting.API_URL.option,  # type: ignore
-    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
-    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    with_comments: bool | None,
     output: TextIO = typer.Option(
         hidden=True, parser=lambda _: sys.stdout, default=sys.stdout
     ),
@@ -471,20 +374,19 @@ def _message(
         print(NO_CHANGES_MESSAGE, file=output)
         return False
 
+    description_file = Runtime.get_value(Setting.DESCRIPTION_FILE.value)
     file_path = (
         description_file and Path(Runtime.repository or ".", description_file) or None
     )
     client = LLMClient(
-        use_emojis=Runtime.get_value(Setting.EMOJIS.value, with_emojis),  # type: ignore
-        model_name=Runtime.get_value(Setting.MODEL.value, model),  # type: ignore
-        model_reasoning=Runtime.get_value(Setting.MODEL_REASONING.value, reasoning),  # type: ignore
-        max_tokens=Runtime.get_value(Setting.MAX_INPUT_TOKENS.value, max_input_tokens),  # type: ignore
-        max_output_tokens=Runtime.get_value(
-            Setting.MAX_OUTPUT_TOKENS.value, max_output_tokens
-        ),  # type: ignore
-        api_key=Runtime.get_value(Setting.API_KEY.value, api_key),
-        api_url=Runtime.get_value(Setting.API_URL.value, api_url),
-        use_tools=Runtime.get_value(Setting.TOOLS.value, tools)
+        use_emojis=Runtime.get_value(Setting.EMOJIS.value),  # type: ignore
+        model_name=Runtime.get_value(Setting.MODEL.value),  # type: ignore
+        model_reasoning=Runtime.get_value(Setting.MODEL_REASONING.value),
+        max_tokens=Runtime.get_value(Setting.MAX_INPUT_TOKENS.value),  # type: ignore
+        max_output_tokens=Runtime.get_value(Setting.MAX_OUTPUT_TOKENS.value),  # type: ignore
+        api_key=Runtime.get_value(Setting.API_KEY.value),
+        api_url=Runtime.get_value(Setting.API_URL.value),
+        use_tools=Runtime.get_value(Setting.TOOLS.value)
         and file_path is not None
         and file_path.exists(),  # type: ignore
         respository_description=lambda: read_file(file_path),  # type: ignore
@@ -716,6 +618,15 @@ def _(
         allow_from_autoenv=True,
         envvar="GIT_LLM_REPO",
     ),
+    description_file: str | None = Setting.DESCRIPTION_FILE.option,  # type: ignore
+    model: str | None = Setting.MODEL.option,  # type: ignore
+    api_key: str | None = Setting.API_KEY.option,  # type: ignore
+    api_url: str | None = Setting.API_URL.option,  # type: ignore
+    tools: bool | None = Setting.TOOLS.option,  # type: ignore
+    reasoning: str | None = Setting.MODEL_REASONING.option,  # type: ignore
+    max_input_tokens: int | None = Setting.MAX_INPUT_TOKENS.option,  # type: ignore
+    max_output_tokens: int | None = Setting.MAX_OUTPUT_TOKENS.option,  # type: ignore
+    with_emojis: bool | None = Setting.EMOJIS.option,  # type: ignore
     confirm: bool = typer.Option(
         help="Requests confirmation before changing a setting",
         callback=Runtime._set_confirm,

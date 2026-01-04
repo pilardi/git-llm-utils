@@ -152,14 +152,14 @@ def repository_2(tmp_path_factory: pytest.TempPathFactory):
 def test_verify(cmd: list[str], mock_server: str):
     verification = _read_file("tests/files/verification.out")
     args = cmd + [
-        "verify",
-        "--api-url",
-        mock_server,
+        "--no-with-emojis",
         "--model",
         API_MODEL,
+        "--api-url",
+        mock_server,
         "--api-key",
         API_KEY_TOKEN,
-        "--no-with-emojis",
+        "verify",
     ]
     cli_status = execute_command(args)
     assert cli_status is not None
@@ -169,31 +169,40 @@ def test_verify(cmd: list[str], mock_server: str):
 @pytest.mark.integration
 def test_status_with_no_emojis(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/status.out")
-    args = cmd + [
-        "--debug",
-        "status",
-        "--api-url",
-        mock_server,
-        "--model",
-        API_MODEL,
-        "--api-key",
-        API_KEY_TOKEN,
-        "--no-with-emojis",
-    ]
     cli_status = execute_command(
-        args,
+        cmd
+        + [
+            "--no-with-emojis",
+            "--debug",
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
+            "status",
+        ],
         cwd=repository,
     )
     assert cli_status is not None
     assert status == cli_status.rstrip()
 
     execute_command(  # update settings
-        cmd + ["set-config", "emojis", "--scope", "local", "--value", "False"],
+        cmd + ["set-config", "emojis", "--value", "False"],
         cwd=repository,
     )
-    del args[-1]
     cli_status = execute_command(
-        args,
+        cmd
+        + [
+            "--debug",
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
+            "status",
+        ],
         cwd=repository,
     )
     assert cli_status is not None
@@ -203,30 +212,38 @@ def test_status_with_no_emojis(cmd: list[str], repository: str, mock_server: str
 @pytest.mark.integration
 def test_status_with_emojis(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/status_with_emojis.out")
-    args = cmd + [
-        "status",
-        "--api-url",
-        mock_server,
-        "--model",
-        API_MODEL,
-        "--api-key",
-        API_KEY_TOKEN,
-        "--with-emojis",
-    ]
     cli_status = execute_command(
-        args,
+        cmd
+        + [
+            "--with-emojis",
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
+            "status",
+        ],
         cwd=repository,
     )
     assert cli_status is not None
     assert status == cli_status.rstrip()
 
     execute_command(  # update settings
-        cmd + ["set-config", "emojis", "--scope", "local", "--value", "True"],
+        cmd + ["set-config", "emojis", "--value", "True"],
         cwd=repository,
     )
-    del args[-1]
     cli_status = execute_command(
-        args,
+        cmd
+        + [
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
+            "status",
+        ],
         cwd=repository,
     )
     assert cli_status is not None
@@ -237,13 +254,13 @@ def test_status_with_emojis(cmd: list[str], repository: str, mock_server: str):
 def test_generate_with_no_comments(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/generate_with_no_comments.out")
     args = cmd + [
-        "generate",
-        "--api-url",
-        mock_server,
         "--model",
         API_MODEL,
+        "--api-url",
+        mock_server,
         "--api-key",
         API_KEY_TOKEN,
+        "generate",
         "--no-manual",
         "--no-with-comments",
     ]
@@ -271,13 +288,13 @@ def test_generate_with_no_comments(cmd: list[str], repository: str, mock_server:
 def test_generate_with_comments(cmd: list[str], repository: str, mock_server: str):
     status = _read_file("tests/files/generate_with_comments.out")
     args = cmd + [
-        "generate",
-        "--api-url",
-        mock_server,
         "--model",
         API_MODEL,
+        "--api-url",
+        mock_server,
         "--api-key",
         API_KEY_TOKEN,
+        "generate",
         "--no-manual",
         "--with-comments",
     ]
@@ -307,15 +324,15 @@ def test_generate_with_comments_and_repository(
 ):
     status = _read_file("tests/files/generate_with_comments.out")
     args = cmd + [
-        "--repository",
-        repository,
-        "generate",
-        "--api-url",
-        mock_server,
         "--model",
         API_MODEL,
+        "--repository",
+        repository,
+        "--api-url",
+        mock_server,
         "--api-key",
         API_KEY_TOKEN,
+        "generate",
         "--no-manual",
         "--with-comments",
     ]
@@ -552,13 +569,13 @@ def test_command(cmd: list[str], repository: str, mock_server: str):
     changeset = execute_command(
         cmd
         + [
-            "command",
-            "--api-url",
-            mock_server,
             "--model",
             API_MODEL,
+            "--api-url",
+            mock_server,
             "--api-key",
             API_KEY_TOKEN,
+            "command",
             "--no-with-comments",
             "--",
             "git",
@@ -585,15 +602,15 @@ def test_command_with_editor(cmd: list[str], repository: str, mock_server: str):
     changeset = execute_command(
         cmd
         + [
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
             "command",
             "--editor",
             "touch",
-            "--api-url",
-            mock_server,
-            "--model",
-            API_MODEL,
-            "--api-key",
-            API_KEY_TOKEN,
             "--",
             "git",
             "commit",
@@ -613,13 +630,13 @@ def test_commit(cmd: list[str], repository: str, mock_server: str):
     changeset = execute_command(
         cmd
         + [
-            "commit",
-            "--api-url",
-            mock_server,
             "--model",
             API_MODEL,
+            "--api-url",
+            mock_server,
             "--api-key",
             API_KEY_TOKEN,
+            "commit",
             "--no-with-comments",
         ],
         abort_on_error=True,
@@ -639,15 +656,15 @@ def test_commit_with_editor(cmd: list[str], repository: str, mock_server: str):
     changeset = execute_command(
         cmd
         + [
+            "--model",
+            API_MODEL,
+            "--api-url",
+            mock_server,
+            "--api-key",
+            API_KEY_TOKEN,
             "commit",
             "--editor",
             "touch",
-            "--api-url",
-            mock_server,
-            "--model",
-            API_MODEL,
-            "--api-key",
-            API_KEY_TOKEN,
         ],
         abort_on_error=True,
         valid_codes=[0, 256 + ErrorHandler.EMPTY_MESSAGE],
