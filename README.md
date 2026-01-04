@@ -101,11 +101,11 @@ to change the setting, where *setting* is any of the available [settings](#setti
 By default the system uses [`qwen3-coder:480b-cloud`](https://ollama.com/library/qwen3-coder:480b-cloud), however you can try other models such as [`nemotron-3-nano:30b-cloud`](https://ollama.com/library/nemotron-3-nano). ie:
 
  ```bash
-ollama pull nemotron-3-nano:30b-cloud && git-llm-utils commit --model ollama/nemotron-3-nano:30b-cloud
+ollama pull nemotron-3-nano:30b-cloud && git-llm-utils --model ollama/nemotron-3-nano:30b-cloud commit
 ```
 Local models are also supported however the quality of the message will drasticall vary based on the size of it (even worse for non-thinking models), ie:
 ```bash
-ollama pull deepseek-coder:6.7b && git-llm-utils commit --model ollama/deepseek-coder:6.7b --reasoning none
+ollama pull deepseek-coder:6.7b && git-llm-utils --model ollama/deepseek-coder:6.7b --reasoning none commit
 ```
 
 ## References:
